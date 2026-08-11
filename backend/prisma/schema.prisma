@@ -1,0 +1,353 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  OFFICER
+  FARMER
+}
+
+enum UserStatus {
+  ACTIVE
+  BANNED
+  PENDING
+}
+
+model User {
+  id           String      @id @default(uuid())
+  email        String      @unique
+  passwordHash String?
+  googleId     String?     @unique
+  name         String
+  role         Role
+  status       UserStatus  @default(ACTIVE)
+  language     String      @default("en")
+  phoneNumber  String?
+  profilePictureUrl String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  lastLogin    DateTime?
+
+  farmerProfile  FarmerProfile?
+  officerProfile OfficerProfile?
+  adminProfile   AdminProfile?
+
+  posts                     Post[]
+  likes                     Like[]
+  comments                  Comment[]
+  broadcasts                Broadcast[]
+  farmerAppointments        Appointment[]     @relation("FarmerAppointments")
+  officerAppointments       Appointment[]     @relation("OfficerAppointments")
+  banRequestsSent           BanRequest[]      @relation("BanRequestsSent")
+  banRequestsTarget         BanRequest[]      @relation("BanRequestsTarget")
+  transferRequestsSent      TransferRequest[] @relation("TransferRequestsSent")
+  transferRequestsFarmer    TransferRequest[] @relation("TransferRequestsFarmer")
+  transferRequestsSuggested TransferRequest[] @relation("TransferRequestsSuggested")
+  notifications             Notification[]
+  conversations             AIConversation[]
+  farmerCases               DiseaseCase[]     @relation("FarmerCases")
+  officerCases              DiseaseCase[]     @relation("OfficerCases")
+}
+
+model Region {
+  id       String @id @default(uuid())
+  state    String
+  district String
+  block    String
+  village  String
+
+  farmers    FarmerProfile[]
+  officers   OfficerProfile[] @relation("OfficerRegions")
+  broadcasts Broadcast[]
+
+  @@unique([state, district, block, village])
+}
+
+model FarmerProfile {
+  id                String          @id
+  user              User            @relation(fields: [id], references: [id], onDelete: Cascade)
+  address           String
+  regionId          String
+  region            Region          @relation(fields: [regionId], references: [id])
+  landSize          Float
+  soilType          String
+  irrigationType    String
+  primaryCrop       String
+  cropGrowthStage   String
+  assignedOfficerId String?
+  assignedOfficer   OfficerProfile? @relation(fields: [assignedOfficerId], references: [id])
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+}
+
+model OfficerProfile {
+  id        String          @id
+  user      User            @relation(fields: [id], references: [id], onDelete: Cascade)
+  regions       Region[]        @relation("OfficerRegions")
+  farmers       FarmerProfile[]
+  designation   String?
+  qualification String?
+  callingTime   String?         @default("9:00 AM - 5:00 PM")
+  department    String?
+  experience    String?
+  availability  String?         @default("Available")
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+model AdminProfile {
+  id        String   @id
+  user      User     @relation(fields: [id], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==========================================
+// PHASE 2 - COMMUNITY PLATFORM
+// ==========================================
+
+model Post {
+  id        String    @id @default(uuid())
+  content   String
+  imageUrl  String?
+  category  String    // crop type or general agricultural category
+  location  String    // region information
+  authorId  String
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  likes     Like[]
+  comments  Comment[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==========================================
+// PHASE 2 - GOVERNMENT SCHEMES
+// ==========================================
+
+enum SchemeStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model Scheme {
+  id                String       @id @default(uuid())
+  title             String
+  description       String
+  eligibility       String
+  benefits          String
+  requiredDocuments String[]
+  officialUrl       String
+  source            String
+  status            SchemeStatus @default(DRAFT)
+  expiryDate        DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+}
+
+// ==========================================
+// PHASE 2 - BROADCAST SYSTEM
+// ==========================================
+
+enum BroadcastScope {
+  NATIONWIDE
+  REGIONAL
+}
+
+enum BroadcastPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum BroadcastStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model Broadcast {
+  id             String            @id @default(uuid())
+  title          String
+  message        String
+  authorId       String
+  author         User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorRole     Role
+  targetScope    BroadcastScope
+  targetRegionId String?
+  targetRegion   Region?           @relation(fields: [targetRegionId], references: [id])
+  priority       BroadcastPriority @default(MEDIUM)
+  status         BroadcastStatus   @default(PUBLISHED)
+  scheduledAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+}
+
+// ==========================================
+// PHASE 2 - APPOINTMENT SYSTEM
+// ==========================================
+
+enum AppointmentStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  RESCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+model Appointment {
+  id                String            @id @default(uuid())
+  farmerId          String
+  farmer            User              @relation("FarmerAppointments", fields: [farmerId], references: [id], onDelete: Cascade)
+  officerId         String
+  officer           User              @relation("OfficerAppointments", fields: [officerId], references: [id], onDelete: Cascade)
+  date              DateTime
+  reason            String
+  status            AppointmentStatus @default(PENDING)
+  consultationNotes String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+// ==========================================
+// PHASE 2 - ADMINISTRATIVE WORKFLOWS
+// ==========================================
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model BanRequest {
+  id           String        @id @default(uuid())
+  requesterId  String
+  requester    User          @relation("BanRequestsSent", fields: [requesterId], references: [id], onDelete: Cascade)
+  targetUserId String
+  targetUser   User          @relation("BanRequestsTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+  reason       String
+  status       RequestStatus @default(PENDING)
+  adminNotes   String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model TransferRequest {
+  id                 String        @id @default(uuid())
+  requesterId        String
+  requester          User          @relation("TransferRequestsSent", fields: [requesterId], references: [id], onDelete: Cascade)
+  farmerId           String
+  farmer             User          @relation("TransferRequestsFarmer", fields: [farmerId], references: [id], onDelete: Cascade)
+  reason             String
+  suggestedOfficerId String?
+  suggestedOfficer   User?         @relation("TransferRequestsSuggested", fields: [suggestedOfficerId], references: [id])
+  status             RequestStatus @default(PENDING)
+  adminNotes         String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+}
+
+// ==========================================
+// PHASE 2 - NOTIFICATIONS
+// ==========================================
+
+enum NotificationType {
+  BROADCAST
+  APPOINTMENT
+  DISEASE
+  BAN_REQUEST
+  TRANSFER_REQUEST
+  SYSTEM
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  message     String
+  type        NotificationType
+  referenceId String?
+  read        Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+}
+
+// ==========================================
+// PHASE 3 - AI & ESCALATIONS
+// ==========================================
+
+model AIConversation {
+  id        String      @id @default(uuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  messages  AIMessage[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model AIMessage {
+  id             String         @id @default(uuid())
+  conversationId String
+  conversation   AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         Role           // FARMER, OFFICER, ADMIN or SYSTEM/AI
+  content        String
+  imageUrl       String?
+  createdAt      DateTime       @default(now())
+}
+
+enum CaseStatus {
+  PENDING
+  RESOLVED
+}
+
+model DiseaseCase {
+  id               String      @id @default(uuid())
+  farmerId         String
+  farmer           User        @relation("FarmerCases", fields: [farmerId], references: [id], onDelete: Cascade)
+  officerId        String
+  officer          User        @relation("OfficerCases", fields: [officerId], references: [id], onDelete: Cascade)
+  cropType         String
+  imageAnalysisUrl String?
+  aiDiagnosis      String
+  aiConfidence     Float
+  farmerNotes      String?
+  officerFeedback  String?
+  status           CaseStatus  @default(PENDING)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+}
+
+model SystemSetting {
+  key   String @id
+  value String
+}

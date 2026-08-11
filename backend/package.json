@@ -1,0 +1,40 @@
+{
+  "name": "arva-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Government Smart Crop Advisory System (ARVA)",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "nodemon src/server.ts",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:seed": "ts-node prisma/seed.ts"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@prisma/client": "^5.11.0",
+    "axios": "^1.19.0",
+    "bcrypt": "^5.1.1",
+    "cloudinary": "^2.10.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "google-auth-library": "^9.7.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.2.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/multer": "^2.2.0",
+    "@types/node": "^20.11.28",
+    "nodemon": "^3.1.0",
+    "prisma": "^5.11.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.2"
+  }
+}
