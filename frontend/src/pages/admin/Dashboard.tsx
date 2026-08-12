@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -16,7 +16,14 @@ import {
   UserPlus,
   Globe,
   Trash2,
-  XCircle
+  XCircle,
+  Star,
+  AlertTriangle,
+  Calendar,
+  BookOpen,
+  Bell,
+  BarChart3,
+  ShieldCheck
 } from 'lucide-react';
 
 const officerFormSchema = z.object({
@@ -48,6 +55,7 @@ type SchemeFormValues = z.infer<typeof schemeFormSchema>;
 
 export const AdminDashboard: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const params = new URLSearchParams(location.search);
   const activeTab = params.get('tab') || 'dashboard';
 
@@ -56,6 +64,7 @@ export const AdminDashboard: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
   const [officersList, setOfficersList] = useState<any[]>([]);
+  const [officerRatings, setOfficerRatings] = useState<any[]>([]);
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -122,16 +131,18 @@ export const AdminDashboard: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      const [statsRes, usersRes, regionsRes, officersRes] = await Promise.all([
+      const [statsRes, usersRes, regionsRes, officersRes, ratingsRes] = await Promise.all([
         api.get('/admin/dashboard'),
         api.get('/admin/users'),
         api.get('/admin/regions'),
         api.get('/admin/officers'),
+        api.get('/admin/officers/ratings'),
       ]);
       setStats(statsRes.data.data);
       setUsers(usersRes.data.data);
       setRegions(regionsRes.data.data);
       setOfficersList(officersRes.data.data);
+      setOfficerRatings(ratingsRes.data.data);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to load admin dashboard data');
     } finally {
@@ -169,6 +180,17 @@ export const AdminDashboard: React.FC = () => {
       alert(err.response?.data?.message || 'Failed to update user status.');
     } finally {
       setBanningUser(null);
+    }
+  };
+
+  const handleDeactivateOfficer = async (officerId: string) => {
+    if (!window.confirm('Are you sure you want to deactivate and archive this officer? This will clear their active regional village coverages and assignments to preserve historical appointment records.')) return;
+    try {
+      await api.delete(`/admin/officers/${officerId}`);
+      setOfficerSuccess('Officer deactivated and archived successfully. Regional assignments have been cleared.');
+      fetchData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to deactivate officer.');
     }
   };
 
@@ -446,44 +468,151 @@ export const AdminDashboard: React.FC = () => {
       {/* 1. OVERVIEW DASHBOARD TAB */}
       {activeTab === 'dashboard' && (
         <>
-          {/* Metrics Row */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
-            <div className="bg-[#ffffff] p-5 border border-stone-200 shadow-sm rounded-3xl flex flex-col justify-center">
-              <span className="block text-xs font-bold text-stone-400 uppercase">Total Farmers</span>
-              <span className="text-2xl font-extrabold text-stone-800 mt-1">{stats.totalFarmers}</span>
+          {/* KPI Metrics Grid */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            <div className="bg-[#ffffff] p-5 border border-stone-200 shadow-sm rounded-3xl flex items-center space-x-4">
+              <div className="bg-emerald-50 p-3 rounded-2xl text-emerald-700 shrink-0">
+                <Users className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="block text-[10px] font-bold text-stone-400 uppercase">Total Farmers</span>
+                <span className="text-xl font-extrabold text-stone-850 mt-0.5">{stats.totalFarmers}</span>
+              </div>
             </div>
-            <div className="bg-[#ffffff] p-5 border border-stone-200 shadow-sm rounded-3xl flex flex-col justify-center">
-              <span className="block text-xs font-bold text-stone-400 uppercase">Registered Officers</span>
-              <span className="text-2xl font-extrabold text-stone-800 mt-1">{stats.totalOfficers}</span>
+
+            <div className="bg-[#ffffff] p-5 border border-stone-200 shadow-sm rounded-3xl flex items-center space-x-4">
+              <div className="bg-amber-50 p-3 rounded-2xl text-amber-700 shrink-0">
+                <Shield className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="block text-[10px] font-bold text-stone-400 uppercase">Total Officers</span>
+                <span className="text-xl font-extrabold text-stone-850 mt-0.5">{stats.totalOfficers}</span>
+              </div>
             </div>
-            <div className="bg-[#ffffff] p-5 border border-stone-200 shadow-sm rounded-3xl flex flex-col justify-center">
-              <span className="block text-xs font-bold text-stone-400 uppercase">Active Users</span>
-              <span className="text-2xl font-extrabold text-stone-800 mt-1">{stats.totalUsers}</span>
+
+            <div className="bg-[#ffffff] p-5 border border-stone-200 shadow-sm rounded-3xl flex items-center space-x-4">
+              <div className="bg-blue-50 p-3 rounded-2xl text-blue-700 shrink-0">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="block text-[10px] font-bold text-stone-400 uppercase">Active Accounts</span>
+                <span className="text-xl font-extrabold text-stone-850 mt-0.5">{stats.activeUsers}</span>
+              </div>
             </div>
-            <div className="bg-[#ffffff] p-5 border border-stone-200 shadow-sm rounded-3xl flex flex-col justify-center">
-              <span className="block text-xs font-bold text-stone-400 uppercase">Mapped Regions</span>
-              <span className="text-2xl font-extrabold text-stone-800 mt-1">{stats.totalRegions}</span>
+
+            <div className="bg-[#ffffff] p-5 border border-stone-200 shadow-sm rounded-3xl flex items-center space-x-4">
+              <div className="bg-red-50 p-3 rounded-2xl text-red-750 shrink-0">
+                <Ban className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="block text-[10px] font-bold text-stone-400 uppercase">Banned Accounts</span>
+                <span className="text-xl font-extrabold text-stone-850 mt-0.5">{stats.bannedUsers}</span>
+              </div>
             </div>
-            <div className="bg-[#ffffff] p-5 border border-stone-200 shadow-sm rounded-3xl flex flex-col justify-center col-span-2 lg:col-span-1">
-              <span className="block text-xs font-bold text-stone-400 uppercase font-bold text-red-750">Pending Cases</span>
-              <span className="text-2xl font-extrabold text-red-750 mt-1">
-                {stats.pendingBanRequests + stats.pendingTransferRequests}
-              </span>
+
+            <div className="bg-[#ffffff] p-5 border border-stone-200 shadow-sm rounded-3xl flex items-center space-x-4">
+              <div className="bg-rose-50 p-3 rounded-2xl text-rose-700 shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="block text-[10px] font-bold text-stone-400 uppercase">Disease Cases</span>
+                <span className="text-xl font-extrabold text-stone-850 mt-0.5">{stats.totalDiseaseCases}</span>
+              </div>
+            </div>
+
+            <div className="bg-[#ffffff] p-5 border border-stone-200 shadow-sm rounded-3xl flex items-center space-x-4">
+              <div className="bg-purple-50 p-3 rounded-2xl text-purple-700 shrink-0">
+                <Calendar className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="block text-[10px] font-bold text-stone-400 uppercase">Appointments</span>
+                <span className="text-xl font-extrabold text-stone-850 mt-0.5">{stats.totalAppointments}</span>
+              </div>
+            </div>
+
+            <div className="bg-[#ffffff] p-5 border border-stone-200 shadow-sm rounded-3xl flex items-center space-x-4">
+              <div className="bg-indigo-50 p-3 rounded-2xl text-indigo-750 shrink-0">
+                <BookOpen className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="block text-[10px] font-bold text-stone-400 uppercase">Total Schemes</span>
+                <span className="text-xl font-extrabold text-stone-850 mt-0.5">{stats.totalSchemes}</span>
+              </div>
+            </div>
+
+            <div className="bg-[#ffffff] p-5 border border-stone-200 shadow-sm rounded-3xl flex items-center space-x-4">
+              <div className="bg-orange-50 p-3 rounded-2xl text-orange-700 shrink-0">
+                <Bell className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="block text-[10px] font-bold text-stone-400 uppercase">Total Broadcasts</span>
+                <span className="text-xl font-extrabold text-stone-850 mt-0.5">{stats.totalBroadcasts}</span>
+              </div>
             </div>
           </div>
 
-          {/* Platform Activity Overview charts */}
-          <div className="bg-[#ffffff] p-6 border border-stone-200 shadow-sm rounded-3xl space-y-4">
-            <h3 className="text-base font-bold text-stone-900 border-b border-stone-200 pb-2">Platform Content Densities</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="p-4 border border-stone-150 rounded-2xl space-y-2">
-                <span className="text-xs font-bold text-stone-500 uppercase">Total Consultation Appointments</span>
-                <span className="text-xl font-extrabold text-stone-850 block">{stats.totalAppointments} Consultations</span>
+          {/* SVG Trend Chart & Full Analytics Call to Action */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+            {/* SVG registration trend chart */}
+            <div className="lg:col-span-2 bg-[#ffffff] p-6 border border-stone-200 shadow-sm rounded-3xl space-y-4">
+              <div>
+                <h3 className="text-xs font-bold text-stone-900 uppercase tracking-wider">Farmer Registration Trend</h3>
+                <span className="text-[10px] text-stone-400 font-semibold">New profile registrations over the last 6 months</span>
               </div>
-              <div className="p-4 border border-stone-150 rounded-2xl space-y-2">
-                <span className="text-xs font-bold text-stone-500 uppercase">Total Farmer Community Posts</span>
-                <span className="text-xl font-extrabold text-stone-850 block">{stats.totalPosts} Posts published</span>
+              
+              <div className="w-full flex justify-center">
+                {(() => {
+                  const chartHeight = 150;
+                  const chartWidth = 500;
+                  const trend = stats.registrationTrend || [];
+                  const maxTrendVal = Math.max(...trend.map((t: any) => t.count), 5);
+                  const points = trend.map((t: any, i: number) => {
+                    const x = (i / Math.max(trend.length - 1, 1)) * (chartWidth - 40) + 20;
+                    const y = chartHeight - (t.count / maxTrendVal) * (chartHeight - 40) - 20;
+                    return { x, y, count: t.count, month: t.month };
+                  });
+                  const linePath = points.map((p: any, i: number) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+
+                  return (
+                    <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full max-w-lg h-auto overflow-visible">
+                      <line x1="20" y1="130" x2="480" y2="130" stroke="#e5e5e0" strokeWidth="1" />
+                      <line x1="20" y1="75" x2="480" y2="75" stroke="#e5e5e0" strokeDasharray="4" />
+                      <line x1="20" y1="20" x2="480" y2="20" stroke="#e5e5e0" strokeDasharray="4" />
+
+                      {points.length > 1 && (
+                        <path d={linePath} fill="none" stroke="#dc2626" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                      )}
+
+                      {points.map((p: any, idx: number) => (
+                        <g key={idx}>
+                          <circle cx={p.x} cy={p.y} r="4" fill="#dc2626" stroke="#ffffff" strokeWidth="1.5" />
+                          <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize="9" fontWeight="bold" fill="#2d2d2d">{p.count}</text>
+                          <text x={p.x} y="145" textAnchor="middle" fontSize="9" fontWeight="bold" fill="#787870">{p.month}</text>
+                        </g>
+                      ))}
+                    </svg>
+                  );
+                })()}
               </div>
+            </div>
+
+            {/* Quick action / Analytics panel */}
+            <div className="bg-[#ffffff] p-6 border border-stone-200 shadow-sm rounded-3xl flex flex-col justify-between space-y-6">
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold text-stone-900 uppercase tracking-wider flex items-center">
+                  <BarChart3 className="w-4 h-4 mr-1.5 text-red-750 animate-pulse" />
+                  System Analytics
+                </h3>
+                <p className="text-xs text-stone-500 font-semibold leading-relaxed">
+                  Analyze platform performance metrics, state/district farmer densities, and community activity stats.
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/admin/analytics')}
+                className="w-full py-2.5 bg-red-750 hover:bg-red-800 text-stone-50 text-xs font-extrabold rounded-xl shadow-sm transition-colors text-center cursor-pointer"
+              >
+                View Full Analytics
+              </button>
             </div>
           </div>
         </>
@@ -705,10 +834,11 @@ export const AdminDashboard: React.FC = () => {
           </div>
 
           {/* Officers directory */}
-          <div className="lg:col-span-2 bg-[#ffffff] p-6 border border-stone-200 shadow-sm rounded-3xl space-y-4">
-            <h3 className="text-base font-bold text-stone-900 border-b border-stone-200 pb-2">Registered Agriculture Officers</h3>
-            <div className="space-y-4 max-h-[600px] overflow-y-auto pr-1">
-              {officersList.map((officer) => (
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-[#ffffff] p-6 border border-stone-200 shadow-sm rounded-3xl space-y-4">
+              <h3 className="text-base font-bold text-stone-900 border-b border-stone-200 pb-2">Registered Agriculture Officers</h3>
+              <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1">
+                {officersList.map((officer) => (
                   <div key={officer.id} className="p-4 border border-stone-150 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-[#faf9f5]/55 shadow-sm">
                     <div className="space-y-1">
                       <h4 className="text-sm font-bold text-stone-900">{officer.name}</h4>
@@ -732,6 +862,16 @@ export const AdminDashboard: React.FC = () => {
                       >
                         Edit Details
                       </button>
+                      {officer.status === 'ACTIVE' ? (
+                        <button
+                          onClick={() => handleDeactivateOfficer(officer.id)}
+                          className="px-3 py-1 bg-red-50 hover:bg-red-100 border border-red-250 rounded-lg text-xs font-bold text-red-750 cursor-pointer"
+                        >
+                          Deactivate
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-bold text-stone-400">Archived</span>
+                      )}
                       <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase ${
                         officer.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'
                       }`}>
@@ -740,6 +880,51 @@ export const AdminDashboard: React.FC = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Performance reviews rankings */}
+            <div className="bg-[#ffffff] p-6 border border-stone-200 shadow-sm rounded-3xl space-y-4">
+              <h3 className="text-base font-bold text-stone-900 border-b border-stone-200 pb-2 flex items-center gap-1.5">
+                <Star className="w-5 h-5 text-amber-500 fill-amber-400" />
+                Officer Performance Reviews & Ratings Rankings
+              </h3>
+              <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1">
+                {officerRatings.map((rate) => (
+                  <div key={rate.id} className="p-4 border border-stone-150 rounded-2xl bg-[#faf9f5]/55 shadow-sm space-y-2">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h4 className="text-sm font-bold text-stone-900">{rate.name}</h4>
+                        <span className="text-[10px] text-stone-400 font-bold">{rate.email}</span>
+                      </div>
+                      <div className="flex items-center space-x-1.5 bg-amber-50 border border-amber-250 px-2 py-0.5 rounded-lg text-xs font-bold text-amber-800">
+                        <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
+                        <span>{rate.averageRating} ({rate.totalReviews} reviews)</span>
+                      </div>
+                    </div>
+
+                    {rate.reviews.length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        <span className="block text-[10px] font-bold text-stone-400 uppercase">Recent Farmer Reviews</span>
+                        <div className="space-y-1">
+                          {rate.reviews.slice(0, 2).map((rev: any, rIdx: number) => (
+                            <div key={rIdx} className="bg-stone-50 border border-stone-200 p-2.5 rounded-xl text-[10px] font-semibold leading-relaxed text-stone-700">
+                              <div className="flex justify-between font-bold text-stone-800 mb-0.5">
+                                <span>Farmer: {rev.farmer?.name || 'Anonymous'}</span>
+                                <span className="text-amber-600">{'★'.repeat(rev.rating)}</span>
+                              </div>
+                              <p className="italic">"{rev.reviewText || 'No comments left.'}"</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {officerRatings.length === 0 && (
+                  <p className="text-xs text-stone-400 italic font-semibold text-center py-6">No performance reviews logged in the database yet.</p>
+                )}
+              </div>
             </div>
           </div>
         </div>

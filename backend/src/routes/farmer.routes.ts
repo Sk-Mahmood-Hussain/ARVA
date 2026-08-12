@@ -4,6 +4,7 @@ import {
   getFarmerDashboard,
   getFarmerProfile,
   updateFarmerProfile,
+  rateOfficer,
 } from '../controllers/farmer.controller';
 import { requireAuth, requireRole } from '../middlewares/auth';
 import { validateRequest } from '../middlewares/validation';
@@ -39,6 +40,13 @@ router.patch(
   requireAuth,
   requireRole([Role.FARMER]),
   updateFarmerProfile
+);
+
+router.post(
+  '/officers/:id/reviews',
+  requireAuth,
+  requireRole([Role.FARMER]),
+  rateOfficer
 );
 
 export default router;

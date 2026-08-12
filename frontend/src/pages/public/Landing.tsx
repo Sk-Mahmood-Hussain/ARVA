@@ -189,9 +189,8 @@ export const Landing: React.FC = () => {
         </div>
       </section>
 
-      {/* Bottom Footer */}
-      <footer className="mt-auto bg-[#f0e9dc] border-t border-stone-300 py-8 px-6 text-center text-stone-500 text-sm">
-        <p>© {new Date().getFullYear()} ARVA. Developed for the Government of Punjab / Smart India Hackathon (SIH25010).</p>
+      <footer className="mt-auto bg-[#f0e9dc] border-t border-stone-300 py-8 px-6 text-center text-stone-500 text-sm font-semibold">
+        <p>© {new Date().getFullYear()} ARVA Agriculture Advisory Platform. All rights reserved.</p>
       </footer>
     </div>
   );

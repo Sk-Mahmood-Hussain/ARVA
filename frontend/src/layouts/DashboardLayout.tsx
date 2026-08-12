@@ -17,10 +17,11 @@ import {
   Users,
   AlertTriangle,
   Globe,
-  FileText,
   MessageSquare,
   ShieldAlert,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Cloud,
+  BarChart3
 } from 'lucide-react';
 
 interface DashboardLayoutProps {
@@ -81,8 +82,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
         { label: 'Dashboard', path: '/farmer', icon: LayoutDashboard },
         { label: 'AI Assistant', path: '/farmer/assistant', icon: MessageSquare },
         { label: 'Image Detection', path: '/farmer/image-detection', icon: ImageIcon },
+        { label: 'Weather Forecast', path: '/farmer/weather', icon: Cloud },
+        { label: 'Crop Advisory', path: '/farmer/advisory', icon: Sprout },
+        { label: 'Advisories & Alerts', path: '/farmer/alerts', icon: AlertTriangle },
         { label: 'My Profile', path: '/farmer/profile', icon: UserIcon },
-        { label: 'My Officers', path: '/farmer/profile', icon: Shield },
+        { label: 'My Officers', path: '/farmer/officers', icon: Shield },
         { label: 'Community', path: '/farmer?tab=community', icon: Users },
         { label: 'Government Schemes', path: '/farmer?tab=schemes', icon: BookOpen },
         { label: 'Appointments', path: '/farmer?tab=appointments', icon: Calendar },
@@ -95,7 +99,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
         { label: 'Disease Cases', path: '/officer?tab=cases', icon: AlertTriangle },
         { label: 'Appointments', path: '/officer?tab=appointments', icon: Calendar },
         { label: 'Regional Alerts', path: '/officer?tab=broadcasts', icon: Bell },
-        { label: 'Analytics', path: '/officer?tab=analytics', icon: FileText },
+        { label: 'Notifications', path: '/notifications', icon: Bell },
+        { label: 'Analytics', path: '/officer/analytics', icon: BarChart3 },
         { label: 'Profile', path: '/officer/profile', icon: UserIcon },
       ];
     } else {
@@ -108,7 +113,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
         { label: 'Broadcasts', path: '/admin?tab=broadcasts', icon: Bell },
         { label: 'Reports', path: '/admin?tab=requests', icon: ShieldAlert },
         { label: 'Requests', path: '/admin?tab=requests', icon: AlertTriangle },
-        { label: 'Analytics', path: '/admin?tab=dashboard', icon: FileText },
+        { label: 'Notifications', path: '/notifications', icon: Bell },
+        { label: 'Analytics', path: '/admin/analytics', icon: BarChart3 },
+        { label: 'My Profile', path: '/admin/profile', icon: UserIcon },
       ];
     }
   };
@@ -283,8 +290,54 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
       </div>
 
       {/* Footer */}
-      <footer className="bg-stone-100 border-t border-stone-200 py-6 text-center text-xs text-stone-400 font-semibold mt-auto">
-        <p>© {new Date().getFullYear()} ARVA. Developed for Punjab Agriculture Advisory & Smart India Hackathon (SIH25010).</p>
+      <footer className="bg-gradient-to-br from-stone-900 to-stone-950 text-stone-400 border-t border-stone-850 py-10 px-4 sm:px-6 lg:px-8 mt-auto">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8">
+          {/* Logo & Description */}
+          <div className="space-y-3 col-span-1 md:col-span-1">
+            <div className="flex items-center space-x-2 text-stone-50">
+              <Sprout className="w-5 h-5 text-emerald-500" />
+              <span className="font-extrabold text-lg tracking-tight">ARVA Platform</span>
+            </div>
+            <p className="text-xs leading-relaxed text-stone-400 font-medium">
+              An independent smart agricultural advisory system designed to optimize crop health, monitor weather trends, and facilitate consultations.
+            </p>
+          </div>
+          {/* Quick Links */}
+          <div>
+            <h4 className="text-xs font-bold text-stone-250 uppercase tracking-widest mb-3">Quick Navigation</h4>
+            <ul className="space-y-2 text-xs font-semibold">
+              <li><Link to={getDashboardPath()} className="hover:text-emerald-500 transition-colors">Command Center</Link></li>
+              <li><Link to={getProfilePath()} className="hover:text-emerald-500 transition-colors">Profile Details</Link></li>
+              <li><Link to="/notifications" className="hover:text-emerald-500 transition-colors">Inbox Alerts</Link></li>
+            </ul>
+          </div>
+          {/* Support */}
+          <div>
+            <h4 className="text-xs font-bold text-stone-250 uppercase tracking-widest mb-3">Resources & Support</h4>
+            <ul className="space-y-2 text-xs font-semibold">
+              <li><span className="hover:text-emerald-500 transition-colors cursor-pointer">Platform Guidelines</span></li>
+              <li><span className="hover:text-emerald-500 transition-colors cursor-pointer">Technical Support</span></li>
+              <li><span className="hover:text-emerald-500 transition-colors cursor-pointer">Accessibility Options</span></li>
+            </ul>
+          </div>
+          {/* Legal / Contact */}
+          <div>
+            <h4 className="text-xs font-bold text-stone-250 uppercase tracking-widest mb-3">Disclaimers & Contact</h4>
+            <p className="text-xs leading-relaxed mb-2 text-stone-300 font-semibold">
+              Email: support@arva-agri.org
+            </p>
+            <p className="text-[10px] text-stone-500 leading-relaxed italic font-medium">
+              Disclaimer: Irrigation and disease advisories are predictive estimates. Consult local officials before starting chemical spray regimens.
+            </p>
+          </div>
+        </div>
+        <div className="max-w-7xl mx-auto border-t border-stone-850 mt-8 pt-6 flex flex-col sm:flex-row justify-between items-center text-[11px] font-bold text-stone-500 gap-4">
+          <p>© {new Date().getFullYear()} ARVA platform. All rights reserved.</p>
+          <div className="flex space-x-4">
+            <span className="hover:text-stone-300 cursor-pointer">Privacy Statement</span>
+            <span className="hover:text-stone-300 cursor-pointer">Terms of Use</span>
+          </div>
+        </div>
       </footer>
     </div>
   );

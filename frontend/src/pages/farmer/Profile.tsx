@@ -78,6 +78,7 @@ export const Profile: React.FC = () => {
 
   // Officers list in region
   const [regionalOfficers, setRegionalOfficers] = useState<OfficerDetail[]>([]);
+  const [profile, setProfile] = useState<any | null>(null);
   
   // Selected Officer Modal states
   const [selectedOfficer, setSelectedOfficer] = useState<OfficerDetail | null>(null);
@@ -106,27 +107,28 @@ export const Profile: React.FC = () => {
   const fetchProfileAndOfficers = async () => {
     try {
       const res = await api.get('/farmers/profile');
-      const profile = res.data?.data;
-      if (profile) {
+      const profileData = res.data?.data;
+      if (profileData) {
+        setProfile(profileData);
         reset({
           name: user?.name || '',
           phoneNumber: user?.phoneNumber || '',
-          address: profile.address,
-          state: profile.region.state,
-          district: profile.region.district,
-          block: profile.region.block,
-          village: profile.region.village,
-          landSize: profile.landSize,
-          soilType: profile.soilType,
-          irrigationType: profile.irrigationType,
-          primaryCrop: profile.primaryCrop,
-          cropGrowthStage: profile.cropGrowthStage,
+          address: profileData.address,
+          state: profileData.region.state,
+          district: profileData.region.district,
+          block: profileData.region.block,
+          village: profileData.region.village,
+          landSize: profileData.landSize,
+          soilType: profileData.soilType,
+          irrigationType: profileData.irrigationType,
+          primaryCrop: profileData.primaryCrop,
+          cropGrowthStage: profileData.cropGrowthStage,
           language: user?.language || 'en',
         });
 
         // Map regional officers
-        if (profile.region?.officers) {
-          const officers = profile.region.officers.map((off: any) => ({
+        if (profileData.region?.officers) {
+          const officers = profileData.region.officers.map((off: any) => ({
             id: off.user.id,
             name: off.user.name,
             email: off.user.email,
@@ -304,6 +306,38 @@ export const Profile: React.FC = () => {
         </div>
 
         <div className="p-6 sm:p-8 space-y-6">
+          {/* Static Farm Summary Details */}
+          {profile && (
+            <div className="bg-[#faf9f5]/55 p-6 border border-stone-200 shadow-sm rounded-3xl space-y-4">
+              <h3 className="text-base font-bold text-stone-900 flex items-center border-b border-stone-200 pb-2">
+                <Sprout className="w-5 h-5 mr-2 text-emerald-700" />
+                Registered Farm Details Summary
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                <div className="bg-[#ffffff] border border-stone-150 p-4 rounded-2xl shadow-sm">
+                  <span className="block text-[10px] font-bold text-stone-400 uppercase">Primary Crop</span>
+                  <span className="text-sm font-extrabold text-stone-850">{profile.primaryCrop}</span>
+                </div>
+                <div className="bg-[#ffffff] border border-stone-150 p-4 rounded-2xl shadow-sm">
+                  <span className="block text-[10px] font-bold text-stone-400 uppercase">Growth Stage</span>
+                  <span className="text-sm font-extrabold text-stone-850">{profile.cropGrowthStage}</span>
+                </div>
+                <div className="bg-[#ffffff] border border-stone-150 p-4 rounded-2xl shadow-sm">
+                  <span className="block text-[10px] font-bold text-stone-400 uppercase">Land Size</span>
+                  <span className="text-sm font-extrabold text-stone-850">{profile.landSize} Acres</span>
+                </div>
+                <div className="bg-[#ffffff] border border-stone-150 p-4 rounded-2xl shadow-sm">
+                  <span className="block text-[10px] font-bold text-stone-400 uppercase">Soil Category</span>
+                  <span className="text-sm font-extrabold text-stone-850">{profile.soilType}</span>
+                </div>
+                <div className="bg-[#ffffff] border border-stone-150 p-4 rounded-2xl shadow-sm">
+                  <span className="block text-[10px] font-bold text-stone-400 uppercase">Irrigation System</span>
+                  <span className="text-sm font-extrabold text-stone-850">{profile.irrigationType}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {successMsg && (
             <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-2xl flex items-start space-x-2 text-sm font-semibold shadow-sm animate-pulse">
               <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />

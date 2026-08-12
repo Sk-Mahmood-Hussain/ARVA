@@ -15,7 +15,7 @@ const router = Router();
 router.use(requireAuth);
 
 router.post('/ban', requireRole([Role.OFFICER, Role.FARMER]), createBanRequest);
-router.post('/transfer', requireRole([Role.OFFICER]), createTransferRequest);
+router.post('/transfer', requireRole([Role.OFFICER, Role.FARMER]), createTransferRequest);
 
 router.get('/ban', requireRole([Role.ADMIN]), getBanRequests);
 router.get('/transfer', requireRole([Role.ADMIN]), getTransferRequests);

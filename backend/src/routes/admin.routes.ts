@@ -12,6 +12,9 @@ import {
   deleteRegionByAdmin,
   getSettings,
   updateSettings,
+  getAdminAnalytics,
+  deleteOfficerByAdmin,
+  getOfficerRatingsSummary,
 } from '../controllers/admin.controller';
 import { requireAuth, requireRole } from '../middlewares/auth';
 import { Role } from '@prisma/client';
@@ -22,6 +25,7 @@ router.use(requireAuth);
 router.use(requireRole([Role.ADMIN]));
 
 router.get('/dashboard', getAdminDashboard);
+router.get('/analytics', getAdminAnalytics);
 router.get('/users', getAllUsers);
 router.patch('/users/:userId/status', toggleUserStatus);
 
@@ -29,6 +33,8 @@ router.patch('/users/:userId/status', toggleUserStatus);
 router.get('/officers', getOfficersForAdmin);
 router.post('/officers', createOfficerByAdmin);
 router.put('/officers/:id', updateOfficerByAdmin);
+router.delete('/officers/:id', deleteOfficerByAdmin);
+router.get('/officers/ratings', getOfficerRatingsSummary);
 
 // Regions management
 router.get('/regions', getAllRegions);

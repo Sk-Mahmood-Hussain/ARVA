@@ -94,27 +94,43 @@ export const createTransferRequest = async (
   res: Response,
   next: NextFunction
 ) => {
-  if (!req.user || req.user.role !== Role.OFFICER) {
-    return next(new AppError('Only agriculture officers can submit transfer requests', 403));
+  if (!req.user || (req.user.role !== Role.OFFICER && req.user.role !== Role.FARMER)) {
+    return next(new AppError('Unauthorized role', 403));
   }
 
-  const { farmerId, reason, suggestedOfficerId } = req.body;
+  let { farmerId, reason, suggestedOfficerId } = req.body;
+
+  if (req.user.role === Role.FARMER) {
+    // Farmer can only request transfer for themselves
+    farmerId = req.user.id;
+  }
 
   if (!farmerId || !reason) {
     return next(new AppError('Farmer ID and reason are required', 400));
   }
 
   try {
-    // Verify farmer is assigned to officer
-    const farmer = await prisma.farmerProfile.findFirst({
-      where: {
-        id: farmerId,
-        assignedOfficerId: req.user.id,
-      },
-    });
+    // If requester is officer, check jurisdiction
+    if (req.user.role === Role.OFFICER) {
+      const farmer = await prisma.farmerProfile.findFirst({
+        where: {
+          id: farmerId,
+          assignedOfficerId: req.user.id,
+        },
+      });
 
-    if (!farmer) {
-      return next(new AppError('Farmer not found or not assigned to your jurisdiction', 404));
+      if (!farmer) {
+        return next(new AppError('Farmer not found or not assigned to your jurisdiction', 404));
+      }
+    } else {
+      // If requester is farmer, verify farmer profile exists
+      const farmer = await prisma.farmerProfile.findUnique({
+        where: { id: farmerId },
+      });
+
+      if (!farmer) {
+        return next(new AppError('Farmer profile not found', 404));
+      }
     }
 
     const request = await prisma.transferRequest.create({
@@ -133,11 +149,17 @@ export const createTransferRequest = async (
       select: { id: true },
     });
 
+    const requesterName = req.user.name;
+    const title = 'New Farmer Transfer Request';
+    const message = req.user.role === Role.FARMER 
+      ? `Farmer ${requesterName} has requested a transfer to a different officer.`
+      : `Officer ${requesterName} requested transfer for a farmer.`;
+
     for (const admin of admins) {
       await createNotification(
         admin.id,
-        'New Farmer Transfer Request',
-        `Officer ${req.user.name} requested transfer for a farmer.`,
+        title,
+        message,
         'TRANSFER_REQUEST',
         request.id
       );

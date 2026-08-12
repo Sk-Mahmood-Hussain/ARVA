@@ -1,6 +1,7 @@
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
@@ -42,6 +43,7 @@ model User {
   likes                     Like[]
   comments                  Comment[]
   broadcasts                Broadcast[]
+  cropAdvisories            CropAdvisory[]
   farmerAppointments        Appointment[]     @relation("FarmerAppointments")
   officerAppointments       Appointment[]     @relation("OfficerAppointments")
   banRequestsSent           BanRequest[]      @relation("BanRequestsSent")
@@ -53,6 +55,8 @@ model User {
   conversations             AIConversation[]
   farmerCases               DiseaseCase[]     @relation("FarmerCases")
   officerCases              DiseaseCase[]     @relation("OfficerCases")
+  reviewsSent               OfficerReview[]   @relation("FarmerReviews")
+  reviewsReceived           OfficerReview[]   @relation("OfficerReviews")
 }
 
 model Region {
@@ -351,3 +355,34 @@ model SystemSetting {
   key   String @id
   value String
 }
+
+model OfficerReview {
+  id         String   @id @default(uuid())
+  farmerId   String
+  farmer     User     @relation("FarmerReviews", fields: [farmerId], references: [id], onDelete: Restrict)
+  officerId  String
+  officer    User     @relation("OfficerReviews", fields: [officerId], references: [id], onDelete: Restrict)
+  rating     Int      // 1 to 5 stars
+  reviewText String?
+  createdAt  DateTime @default(now())
+
+  @@unique([farmerId, officerId]) // one review per farmer per officer
+}
+
+model CropAdvisory {
+  id            String   @id @default(uuid())
+  farmerId      String
+  farmer        User     @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  summary       String
+  priority      String
+  weatherImpact String
+  irrigation    String
+  cropCare      String
+  fertilizer    String
+  pestRisk      String
+  actions       String[]
+  warning       String
+  contactOfficer Boolean @default(false)
+  createdAt     DateTime @default(now())
+}
+

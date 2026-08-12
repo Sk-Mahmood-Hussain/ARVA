@@ -19,14 +19,19 @@ import Profile from './pages/farmer/Profile';
 import Assistant from './pages/farmer/Assistant';
 import Alerts from './pages/farmer/Alerts';
 import ImageDetection from './pages/farmer/ImageDetection';
+import Weather from './pages/farmer/Weather';
+import Advisory from './pages/farmer/Advisory';
+import Officers from './pages/farmer/Officers';
 
 // Authenticated Officer Pages
 import OfficerDashboard from './pages/officer/Dashboard';
 import OfficerProfile from './pages/officer/Profile';
+import OfficerAnalytics from './pages/officer/Analytics';
 
 // Authenticated Admin Pages
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminProfile from './pages/admin/Profile';
+import AdminAnalytics from './pages/admin/Analytics';
 
 // Shared Authenticated Pages
 import Notifications from './pages/Notifications';
@@ -122,6 +127,42 @@ const App: React.FC = () => {
               }
             />
 
+            {/* Farmer Weather Route */}
+            <Route
+              path="/farmer/weather"
+              element={
+                <ProtectedRoute allowedRoles={['FARMER']}>
+                  <DashboardLayout>
+                    <Weather />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Farmer Advisory Route */}
+            <Route
+              path="/farmer/advisory"
+              element={
+                <ProtectedRoute allowedRoles={['FARMER']}>
+                  <DashboardLayout>
+                    <Advisory />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Farmer Officers Route */}
+            <Route
+              path="/farmer/officers"
+              element={
+                <ProtectedRoute allowedRoles={['FARMER']}>
+                  <DashboardLayout>
+                    <Officers />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+
             {/* Officer Dashboard Route */}
             <Route
               path="/officer"
@@ -129,6 +170,18 @@ const App: React.FC = () => {
                 <ProtectedRoute allowedRoles={['OFFICER']}>
                   <DashboardLayout>
                     <OfficerDashboard />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Officer Analytics Route */}
+            <Route
+              path="/officer/analytics"
+              element={
+                <ProtectedRoute allowedRoles={['OFFICER']}>
+                  <DashboardLayout>
+                    <OfficerAnalytics />
                   </DashboardLayout>
                 </ProtectedRoute>
               }
@@ -153,6 +206,18 @@ const App: React.FC = () => {
                 <ProtectedRoute allowedRoles={['ADMIN']}>
                   <DashboardLayout>
                     <AdminDashboard />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Admin Analytics Route */}
+            <Route
+              path="/admin/analytics"
+              element={
+                <ProtectedRoute allowedRoles={['ADMIN']}>
+                  <DashboardLayout>
+                    <AdminAnalytics />
                   </DashboardLayout>
                 </ProtectedRoute>
               }

@@ -19,6 +19,7 @@ export interface Region {
   district: string;
   block: string;
   village: string;
+  officers?: any[];
 }
 
 export interface FarmerProfile {

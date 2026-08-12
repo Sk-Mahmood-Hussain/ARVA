@@ -39,13 +39,24 @@ export const Alerts: React.FC = () => {
         const advisoryRes = await api.get('/ai/advisory');
         const data = advisoryRes.data.data;
         if (data.advisory) {
+          const advisoryText = `Summary: ${data.advisory.summary}
+
+• Priority Level: ${data.advisory.priority}
+• Weather Impact: ${data.advisory.weatherImpact}
+• Irrigation Plan: ${data.advisory.irrigation}
+• Crop Care Plan: ${data.advisory.cropCare}
+• Fertilizer Plan: ${data.advisory.fertilizer}
+• Pest & Disease Risk: ${data.advisory.pestRisk}
+
+Important Warning: ${data.advisory.warning}`;
+
           aiAdvisoryItem = {
             id: 'ai-advisory-id',
             title: 'Personalized AI Crop Advisory Report',
-            message: data.advisory,
+            message: advisoryText,
             type: 'AI Advisory',
-            priority: 'MEDIUM',
-            timestamp: new Date().toISOString(),
+            priority: data.advisory.priority || 'MEDIUM',
+            timestamp: data.createdAt || new Date().toISOString(),
             author: 'ARVA AI Advisor',
           };
         }

@@ -341,3 +341,69 @@ export const updateFarmerProfile = async (
     next(err);
   }
 };
+
+export const rateOfficer = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user) {
+    return next(new AppError('Unauthorized', 401));
+  }
+
+  const { id } = req.params; // officer id
+  const { rating, reviewText } = req.body;
+
+  if (!rating || typeof rating !== 'number' || rating < 1 || rating > 5) {
+    return next(new AppError('Invalid rating value. Must be a number between 1 and 5.', 400));
+  }
+
+  try {
+    const profile = await prisma.farmerProfile.findUnique({
+      where: { id: req.user.id }
+    });
+
+    if (!profile) {
+      return next(new AppError('Farmer profile not found. Please complete onboarding first.', 404));
+    }
+
+    // Verify officer is assigned to the farmer's region
+    const officer = await prisma.officerProfile.findFirst({
+      where: {
+        id,
+        regions: { some: { id: profile.regionId } }
+      }
+    });
+
+    if (!officer) {
+      return next(new AppError('Forbidden: You can only rate officers assigned to your region.', 403));
+    }
+
+    const review = await prisma.officerReview.upsert({
+      where: {
+        farmerId_officerId: {
+          farmerId: req.user.id,
+          officerId: id
+        }
+      },
+      update: {
+        rating,
+        reviewText: reviewText || null
+      },
+      create: {
+        farmerId: req.user.id,
+        officerId: id,
+        rating,
+        reviewText: reviewText || null
+      }
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Officer rated successfully',
+      data: review
+    });
+  } catch (err) {
+    next(err);
+  }
+};

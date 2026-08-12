@@ -5,6 +5,8 @@ import {
   getConversationDetails,
   deleteConversation,
   getAdvisory,
+  generateAdvisory,
+  getAdvisoryHistory,
   escalateCase,
   getEscalatedCases,
   provideFeedbackOnCase,
@@ -32,8 +34,10 @@ router.delete('/conversations/:id', deleteConversation);
 // Crop leaf image diagnostic detection endpoint
 router.post('/analyze-crop', upload.single('image'), analyzeCropImage);
 
-// Advisory endpoint (max 5 compiles per minute)
-router.get('/advisory', aiRateLimiter(5, 60 * 1000), getAdvisory);
+// Advisory endpoints
+router.get('/advisory', getAdvisory);
+router.post('/advisory', aiRateLimiter(5, 60 * 1000), generateAdvisory);
+router.get('/advisory/history', getAdvisoryHistory);
 
 // Escalation endpoints
 router.post('/escalate', requireRole([Role.FARMER]), escalateCase);

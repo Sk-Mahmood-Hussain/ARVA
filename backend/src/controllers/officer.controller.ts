@@ -2,7 +2,7 @@ import { Response, NextFunction } from 'express';
 import prisma from '../config/db';
 import { AppError } from '../middlewares/error';
 import { AuthenticatedRequest } from '../middlewares/auth';
-import { AppointmentStatus, Role } from '@prisma/client';
+import { AppointmentStatus, Role, CaseStatus } from '@prisma/client';
 
 export const getOfficerDashboard = async (
   req: AuthenticatedRequest,
@@ -85,6 +85,14 @@ export const getOfficerDashboard = async (
       return { month: label, count };
     }).reverse();
 
+    const diseaseReportsPending = await prisma.diseaseCase.count({
+      where: { officerId: req.user.id, status: CaseStatus.PENDING },
+    });
+
+    const verifiedDiseaseReports = await prisma.diseaseCase.count({
+      where: { officerId: req.user.id, status: CaseStatus.RESOLVED },
+    });
+
     res.status(200).json({
       status: 'success',
       data: {
@@ -96,8 +104,8 @@ export const getOfficerDashboard = async (
         completedAppointments,
         regionalBroadcasts,
         growthData,
-        diseaseReportsPending: 0,
-        verifiedDiseaseReports: 0,
+        diseaseReportsPending,
+        verifiedDiseaseReports,
       },
     });
   } catch (err) {
@@ -258,12 +266,65 @@ export const getOfficerAnalytics = async (
       },
     });
 
+    // New farmers (registered in last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const newFarmers = await prisma.farmerProfile.count({
+      where: {
+        regionId: { in: regionIds },
+        createdAt: { gte: thirtyDaysAgo },
+      },
+    });
+
+    // Farmer registration trend (last 6 months)
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const recentFarmers = await prisma.farmerProfile.findMany({
+      where: {
+        regionId: { in: regionIds },
+        createdAt: { gte: sixMonthsAgo },
+      },
+      select: { createdAt: true }
+    });
+
+    const registrationTrend = Array.from({ length: 6 }).map((_, i) => {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const label = d.toLocaleString('default', { month: 'short' });
+      const year = d.getFullYear();
+      const month = d.getMonth();
+      const count = recentFarmers.filter(f => {
+        const fDate = new Date(f.createdAt);
+        return fDate.getMonth() === month && fDate.getFullYear() === year;
+      }).length;
+      return { month: label, count };
+    }).reverse();
+
+    // Disease cases
+    const totalDiseaseCases = await prisma.diseaseCase.count({
+      where: { officerId: req.user.id },
+    });
+    const pendingDiseaseCases = await prisma.diseaseCase.count({
+      where: { officerId: req.user.id, status: CaseStatus.PENDING },
+    });
+    const verifiedDiseaseCases = await prisma.diseaseCase.count({
+      where: { officerId: req.user.id, status: CaseStatus.RESOLVED },
+    });
+
     // Appointments stats
     const totalAppointments = await prisma.appointment.count({
       where: { officerId: req.user.id },
     });
     const completedAppointments = await prisma.appointment.count({
       where: { officerId: req.user.id, status: AppointmentStatus.COMPLETED },
+    });
+    const pendingAppointments = await prisma.appointment.count({
+      where: { officerId: req.user.id, status: AppointmentStatus.PENDING },
+    });
+
+    // Regional broadcasts
+    const regionalBroadcasts = await prisma.broadcast.count({
+      where: { authorId: req.user.id },
     });
 
     // Community activity in officer's region
@@ -277,17 +338,38 @@ export const getOfficerAnalytics = async (
       },
     });
 
+    // Farmer distribution by village in jurisdiction
+    const regionsWithFarmers = await prisma.region.findMany({
+      where: { id: { in: regionIds } },
+      include: {
+        _count: {
+          select: { farmers: true }
+        }
+      }
+    });
+
+    const villageDistribution = regionsWithFarmers.map(r => ({
+      village: r.village,
+      block: r.block,
+      farmerCount: r._count.farmers
+    }));
+
     res.status(200).json({
       status: 'success',
       data: {
         totalFarmers,
         activeFarmers,
+        newFarmers,
+        registrationTrend,
+        totalDiseaseCases,
+        pendingDiseaseCases,
+        verifiedDiseaseCases,
         totalAppointments,
         completedAppointments,
+        pendingAppointments,
+        regionalBroadcasts,
         communityPostsCount,
-        // mock-ready disease verification fields (set to 0 for next phase)
-        pendingDiseases: 0,
-        resolvedDiseases: 0,
+        villageDistribution
       },
     });
   } catch (err) {

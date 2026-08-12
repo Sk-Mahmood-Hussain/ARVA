@@ -17,7 +17,10 @@ import {
   XCircle,
   Loader2,
   AlertTriangle,
-  Send
+  Send,
+  TrendingUp,
+  UserCheck,
+  BarChart3
 } from 'lucide-react';
 
 interface FarmerInfo {
@@ -188,7 +191,12 @@ export const OfficerDashboard: React.FC = () => {
       alert('Ban request submitted successfully! An Administrator will review the case.');
       setSelectedFarmerDetail(null);
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to submit ban request');
+      const msg = err.response?.data?.message || '';
+      if (msg.toLowerCase().includes('jurisdiction') || msg.toLowerCase().includes('region')) {
+        alert("⚠️ This farmer is outside your assigned region.");
+      } else {
+        alert(msg || 'Failed to submit ban request');
+      }
     } finally {
       setSubmittingBan(false);
     }
@@ -326,35 +334,130 @@ export const OfficerDashboard: React.FC = () => {
       {activeTab === 'dashboard' && (
         <>
           {/* Metrics Row */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-[#ffffff] p-6 border border-stone-200 shadow-sm rounded-3xl flex items-center space-x-4">
-              <div className="bg-emerald-100 p-4 rounded-2xl text-emerald-700">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="bg-[#ffffff] p-5 border border-stone-200 shadow-sm rounded-3xl flex items-center space-x-4">
+              <div className="bg-emerald-50 p-3 rounded-2xl text-emerald-700 shrink-0">
                 <Users className="w-6 h-6" />
               </div>
               <div>
-                <span className="block text-xs font-bold text-stone-400 uppercase">Farmers Mapped</span>
-                <span className="text-2xl font-extrabold text-stone-800">{stats.totalFarmers}</span>
+                <span className="block text-[10px] font-bold text-stone-400 uppercase">Mapped Farmers</span>
+                <span className="text-xl font-extrabold text-stone-850 mt-0.5">{stats.totalFarmers}</span>
               </div>
             </div>
 
-            <div className="bg-[#ffffff] p-6 border border-stone-200 shadow-sm rounded-3xl flex items-center space-x-4">
-              <div className="bg-amber-100 p-4 rounded-2xl text-amber-700">
-                <MapPin className="w-6 h-6" />
+            <div className="bg-[#ffffff] p-5 border border-stone-200 shadow-sm rounded-3xl flex items-center space-x-4">
+              <div className="bg-amber-50 p-3 rounded-2xl text-amber-700 shrink-0">
+                <UserCheck className="w-6 h-6" />
               </div>
               <div>
-                <span className="block text-xs font-bold text-stone-400 uppercase">Coverage Blocks</span>
-                <span className="text-2xl font-extrabold text-stone-800">{stats.regions.length}</span>
+                <span className="block text-[10px] font-bold text-stone-400 uppercase">Active Farmers</span>
+                <span className="text-xl font-extrabold text-stone-850 mt-0.5">{stats.activeFarmers}</span>
               </div>
             </div>
 
-            <div className="bg-[#ffffff] p-6 border border-stone-200 shadow-sm rounded-3xl flex items-center space-x-4">
-              <div className="bg-blue-100 p-4 rounded-2xl text-blue-700">
+            <div className="bg-[#ffffff] p-5 border border-stone-200 shadow-sm rounded-3xl flex items-center space-x-4">
+              <div className="bg-blue-50 p-3 rounded-2xl text-blue-700 shrink-0">
+                <TrendingUp className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="block text-[10px] font-bold text-stone-400 uppercase">New Farmers</span>
+                <span className="text-xl font-extrabold text-stone-850 mt-0.5">+{stats.newFarmers}</span>
+              </div>
+            </div>
+
+            <div className="bg-[#ffffff] p-5 border border-stone-200 shadow-sm rounded-3xl flex items-center space-x-4">
+              <div className="bg-red-50 p-3 rounded-2xl text-red-750 shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="block text-[10px] font-bold text-stone-400 uppercase">Pending Cases</span>
+                <span className="text-xl font-extrabold text-stone-850 mt-0.5">{stats.diseaseReportsPending}</span>
+              </div>
+            </div>
+
+            <div className="bg-[#ffffff] p-5 border border-stone-200 shadow-sm rounded-3xl flex items-center space-x-4">
+              <div className="bg-purple-50 p-3 rounded-2xl text-purple-700 shrink-0">
                 <Calendar className="w-6 h-6" />
               </div>
               <div>
-                <span className="block text-xs font-bold text-stone-400 uppercase">Pending Consultations</span>
-                <span className="text-2xl font-extrabold text-stone-800">{stats.pendingAppointments}</span>
+                <span className="block text-[10px] font-bold text-stone-400 uppercase">Appointments</span>
+                <span className="text-xl font-extrabold text-stone-850 mt-0.5">{stats.pendingAppointments}</span>
               </div>
+            </div>
+
+            <div className="bg-[#ffffff] p-5 border border-stone-200 shadow-sm rounded-3xl flex items-center space-x-4">
+              <div className="bg-orange-50 p-3 rounded-2xl text-orange-700 shrink-0">
+                <Bell className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="block text-[10px] font-bold text-stone-400 uppercase">Regional Alerts</span>
+                <span className="text-xl font-extrabold text-stone-850 mt-0.5">{stats.regionalBroadcasts?.length || 0}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Graphical Growth Timeline and Analytics Call-To-Action */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+            {/* SVG growth chart */}
+            <div className="lg:col-span-2 bg-[#ffffff] p-6 border border-stone-200 shadow-sm rounded-3xl space-y-4">
+              <div>
+                <h3 className="text-xs font-bold text-stone-900 uppercase tracking-wider">Farmer Growth Timeline</h3>
+                <span className="text-[10px] text-stone-400 font-semibold">New farmer onboardings mapped over the last 6 months</span>
+              </div>
+              
+              <div className="w-full flex justify-center">
+                {(() => {
+                  const chartHeight = 150;
+                  const chartWidth = 500;
+                  const growthData = stats.growthData || [];
+                  const maxGrowthVal = Math.max(...growthData.map((t: any) => t.count), 5);
+                  const points = growthData.map((t: any, i: number) => {
+                    const x = (i / Math.max(growthData.length - 1, 1)) * (chartWidth - 40) + 20;
+                    const y = chartHeight - (t.count / maxGrowthVal) * (chartHeight - 40) - 20;
+                    return { x, y, count: t.count, month: t.month };
+                  });
+                  const linePath = points.map((p: any, i: number) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+
+                  return (
+                    <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full max-w-lg h-auto overflow-visible">
+                      <line x1="20" y1="130" x2="480" y2="130" stroke="#e5e5e0" strokeWidth="1" />
+                      <line x1="20" y1="75" x2="480" y2="75" stroke="#e5e5e0" strokeDasharray="4" />
+                      <line x1="20" y1="20" x2="480" y2="20" stroke="#e5e5e0" strokeDasharray="4" />
+
+                      {points.length > 1 && (
+                        <path d={linePath} fill="none" stroke="#b45309" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                      )}
+
+                      {points.map((p: any, idx: number) => (
+                        <g key={idx}>
+                          <circle cx={p.x} cy={p.y} r="4" fill="#b45309" stroke="#ffffff" strokeWidth="1.5" />
+                          <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize="9" fontWeight="bold" fill="#2d2d2d">{p.count}</text>
+                          <text x={p.x} y="145" textAnchor="middle" fontSize="9" fontWeight="bold" fill="#787870">{p.month}</text>
+                        </g>
+                      ))}
+                    </svg>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Quick action / Analytics panel */}
+            <div className="bg-[#ffffff] p-6 border border-stone-200 shadow-sm rounded-3xl flex flex-col justify-between space-y-6">
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold text-stone-900 uppercase tracking-wider flex items-center">
+                  <BarChart3 className="w-4 h-4 mr-1.5 text-amber-700 animate-pulse" />
+                  Analytics Hub
+                </h3>
+                <p className="text-xs text-stone-500 font-semibold leading-relaxed">
+                  Monitor detailed regional metrics, farmer growth densities across blocks, and consultation appointment statistics.
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/officer/analytics')}
+                className="w-full py-2.5 bg-amber-700 hover:bg-amber-800 text-stone-50 text-xs font-extrabold rounded-xl shadow-sm transition-colors text-center cursor-pointer"
+              >
+                View Full Analytics Control
+              </button>
             </div>
           </div>
 
@@ -385,17 +488,17 @@ export const OfficerDashboard: React.FC = () => {
             <div className="bg-[#ffffff] p-6 border border-stone-200 shadow-sm rounded-3xl space-y-4">
               <h3 className="text-base font-bold text-stone-900 border-b border-stone-200 pb-2">Operational Tasks</h3>
               <div className="grid grid-cols-2 gap-4">
-                <button onClick={() => navigate('/officer?tab=farmers')} className="p-4 border border-stone-200 rounded-2xl hover:bg-stone-50 text-center font-bold text-stone-700 text-xs">
+                <button onClick={() => navigate('/officer?tab=farmers')} className="p-4 border border-stone-200 rounded-2xl hover:bg-stone-50 text-center font-bold text-stone-700 text-xs cursor-pointer">
                   Review Farmers Directory
                 </button>
-                <button onClick={() => navigate('/officer?tab=appointments')} className="p-4 border border-stone-200 rounded-2xl hover:bg-stone-50 text-center font-bold text-stone-700 text-xs">
+                <button onClick={() => navigate('/officer?tab=appointments')} className="p-4 border border-stone-200 rounded-2xl hover:bg-stone-50 text-center font-bold text-stone-700 text-xs cursor-pointer">
                   Consultation Requests ({stats.pendingAppointments})
                 </button>
-                <button onClick={() => navigate('/officer?tab=broadcasts')} className="p-4 border border-stone-200 rounded-2xl hover:bg-stone-50 text-center font-bold text-stone-700 text-xs">
+                <button onClick={() => navigate('/officer?tab=broadcasts')} className="p-4 border border-stone-200 rounded-2xl hover:bg-stone-50 text-center font-bold text-stone-700 text-xs cursor-pointer">
                   Regional Pest Alerts
                 </button>
-                <button onClick={() => navigate('/officer?tab=analytics')} className="p-4 border border-stone-200 rounded-2xl hover:bg-stone-50 text-center font-bold text-stone-700 text-xs">
-                  Jurisdiction Analytics
+                <button onClick={() => navigate('/officer?tab=cases')} className="p-4 border border-stone-200 rounded-2xl hover:bg-stone-50 text-center font-bold text-stone-700 text-xs cursor-pointer">
+                  Disease Escalations ({stats.diseaseReportsPending})
                 </button>
               </div>
             </div>

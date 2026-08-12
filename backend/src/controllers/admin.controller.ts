@@ -27,6 +27,33 @@ export const getAdminDashboard = async (
     const pendingBanRequests = await prisma.banRequest.count({ where: { status: 'PENDING' } });
     const pendingTransferRequests = await prisma.transferRequest.count({ where: { status: 'PENDING' } });
 
+    const activeUsers = await prisma.user.count({ where: { status: UserStatus.ACTIVE } });
+    const bannedUsers = await prisma.user.count({ where: { status: UserStatus.BANNED } });
+    const totalDiseaseCases = await prisma.diseaseCase.count();
+    const totalSchemes = await prisma.scheme.count();
+    const totalBroadcasts = await prisma.broadcast.count();
+
+    // 6-month registration trend
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const recentFarmers = await prisma.farmerProfile.findMany({
+      where: { createdAt: { gte: sixMonthsAgo } },
+      select: { createdAt: true }
+    });
+
+    const registrationTrend = Array.from({ length: 6 }).map((_, i) => {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const label = d.toLocaleString('default', { month: 'short' });
+      const year = d.getFullYear();
+      const month = d.getMonth();
+      const count = recentFarmers.filter(f => {
+        const fDate = new Date(f.createdAt);
+        return fDate.getMonth() === month && fDate.getFullYear() === year;
+      }).length;
+      return { month: label, count };
+    }).reverse();
+
     res.status(200).json({
       status: 'success',
       data: {
@@ -39,6 +66,12 @@ export const getAdminDashboard = async (
         totalPosts,
         pendingBanRequests,
         pendingTransferRequests,
+        activeUsers,
+        bannedUsers,
+        totalDiseaseCases,
+        totalSchemes,
+        totalBroadcasts,
+        registrationTrend,
       },
     });
   } catch (err) {
@@ -526,6 +559,250 @@ export const updateSettings = async (
     res.status(200).json({
       status: 'success',
       message: 'System settings updated successfully',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getAdminAnalytics = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user) {
+    return next(new AppError('Unauthorized', 401));
+  }
+
+  try {
+    const totalFarmers = await prisma.user.count({ where: { role: Role.FARMER } });
+    const totalOfficers = await prisma.user.count({ where: { role: Role.OFFICER } });
+    const activeUsers = await prisma.user.count({ where: { status: UserStatus.ACTIVE } });
+    const bannedUsers = await prisma.user.count({ where: { status: UserStatus.BANNED } });
+
+    // Farmers by Region details
+    const regionsWithFarmers = await prisma.region.findMany({
+      include: {
+        _count: {
+          select: { farmers: true }
+        }
+      }
+    });
+
+    const stateCounts: Record<string, number> = {};
+    const districtCounts: Record<string, number> = {};
+    const blockCounts: Record<string, number> = {};
+
+    regionsWithFarmers.forEach(r => {
+      const count = r._count.farmers;
+      stateCounts[r.state] = (stateCounts[r.state] || 0) + count;
+      districtCounts[r.district] = (districtCounts[r.district] || 0) + count;
+      blockCounts[r.block] = (blockCounts[r.block] || 0) + count;
+    });
+
+    // Officer counts by region (state, district)
+    const regionsWithOfficers = await prisma.region.findMany({
+      include: {
+        _count: {
+          select: { officers: true }
+        }
+      }
+    });
+
+    const officerStateCounts: Record<string, number> = {};
+    const officerDistrictCounts: Record<string, number> = {};
+
+    regionsWithOfficers.forEach(r => {
+      const count = r._count.officers;
+      officerStateCounts[r.state] = (officerStateCounts[r.state] || 0) + count;
+      officerDistrictCounts[r.district] = (officerDistrictCounts[r.district] || 0) + count;
+    });
+
+    // Farmers assigned per officer
+    const officerProfiles = await prisma.officerProfile.findMany({
+      include: {
+        user: { select: { name: true } },
+        _count: { select: { farmers: true } }
+      }
+    });
+
+    const farmersAssignedPerOfficer = officerProfiles.map(o => ({
+      officerName: o.user?.name || 'Unknown Officer',
+      farmerCount: o._count.farmers
+    }));
+
+    // New farmer registrations over time (last 6 months)
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const recentFarmers = await prisma.farmerProfile.findMany({
+      where: { createdAt: { gte: sixMonthsAgo } },
+      select: { createdAt: true }
+    });
+
+    const registrationTrend = Array.from({ length: 6 }).map((_, i) => {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const label = d.toLocaleString('default', { month: 'short' });
+      const year = d.getFullYear();
+      const month = d.getMonth();
+      const count = recentFarmers.filter(f => {
+        const fDate = new Date(f.createdAt);
+        return fDate.getMonth() === month && fDate.getFullYear() === year;
+      }).length;
+      return { month: label, count };
+    }).reverse();
+
+    // Appointments stats
+    const totalAppointments = await prisma.appointment.count();
+    const completedAppointments = await prisma.appointment.count({ where: { status: 'COMPLETED' } });
+    const pendingAppointments = await prisma.appointment.count({ where: { status: 'PENDING' } });
+
+    // Disease case stats
+    const totalDiseaseCases = await prisma.diseaseCase.count();
+    const verifiedDiseaseCases = await prisma.diseaseCase.count({ where: { status: 'RESOLVED' } });
+    const pendingDiseaseCases = await prisma.diseaseCase.count({ where: { status: 'PENDING' } });
+
+    // Other activity stats
+    const totalBroadcasts = await prisma.broadcast.count();
+    const totalSchemes = await prisma.scheme.count();
+    const totalPosts = await prisma.post.count();
+    const totalComments = await prisma.comment.count();
+    const totalLikes = await prisma.like.count();
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        totalFarmers,
+        totalOfficers,
+        activeUsers,
+        bannedUsers,
+        farmersByState: stateCounts,
+        farmersByDistrict: districtCounts,
+        farmersByBlock: blockCounts,
+        officersByState: officerStateCounts,
+        officersByDistrict: officerDistrictCounts,
+        farmersAssignedPerOfficer,
+        registrationTrend,
+        totalAppointments,
+        completedAppointments,
+        pendingAppointments,
+        totalDiseaseCases,
+        verifiedDiseaseCases,
+        pendingDiseaseCases,
+        totalBroadcasts,
+        totalSchemes,
+        communityActivity: {
+          posts: totalPosts,
+          comments: totalComments,
+          likes: totalLikes
+        }
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const deleteOfficerByAdmin = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user) {
+    return next(new AppError('Unauthorized', 401));
+  }
+
+  const { id } = req.params;
+
+  try {
+    const officer = await prisma.user.findUnique({
+      where: { id },
+      include: { officerProfile: true }
+    });
+
+    if (!officer || officer.role !== Role.OFFICER) {
+      return next(new AppError('Officer not found', 404));
+    }
+
+    // Soft-deactivate/archive by marking user status as BANNED, clearing region assignments
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id },
+        data: { status: UserStatus.BANNED },
+      });
+
+      await tx.officerProfile.update({
+        where: { id },
+        data: {
+          regions: { set: [] }, // remove active regional assignments
+          availability: 'Unavailable'
+        }
+      });
+
+      // Clear active assignments for farmers under this officer
+      await tx.farmerProfile.updateMany({
+        where: { assignedOfficerId: id },
+        data: { assignedOfficerId: null }
+      });
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Officer has been archived and deactivated successfully. Regional assignments have been cleared to preserve historical records.'
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getOfficerRatingsSummary = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user) {
+    return next(new AppError('Unauthorized', 401));
+  }
+
+  try {
+    const officersWithReviews = await prisma.user.findMany({
+      where: { role: Role.OFFICER },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        reviewsReceived: {
+          select: {
+            rating: true,
+            reviewText: true,
+            createdAt: true,
+            farmer: {
+              select: { name: true }
+            }
+          }
+        }
+      }
+    });
+
+    const summary = officersWithReviews.map(o => {
+      const totalReviews = o.reviewsReceived.length;
+      const averageRating = totalReviews > 0
+        ? Number((o.reviewsReceived.reduce((acc, curr) => acc + curr.rating, 0) / totalReviews).toFixed(2))
+        : 0;
+
+      return {
+        id: o.id,
+        name: o.name,
+        email: o.email,
+        averageRating,
+        totalReviews,
+        reviews: o.reviewsReceived
+      };
+    }).sort((a, b) => b.averageRating - a.averageRating);
+
+    res.status(200).json({
+      status: 'success',
+      data: summary
     });
   } catch (err) {
     next(err);

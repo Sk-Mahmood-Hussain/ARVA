@@ -11,6 +11,7 @@ import appointmentRoutes from './appointment.routes';
 import requestRoutes from './request.routes';
 import notificationRoutes from './notification.routes';
 import aiRoutes from './ai.routes';
+import weatherRoutes from './weather.routes';
 
 const router = Router();
 
@@ -26,5 +27,6 @@ router.use('/appointments', appointmentRoutes);
 router.use('/requests', requestRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/ai', aiRoutes);
+router.use('/weather', weatherRoutes);
 
 export default router;
