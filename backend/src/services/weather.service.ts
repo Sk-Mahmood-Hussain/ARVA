@@ -32,6 +32,7 @@ export interface LiveWeatherData {
   windspeed: number;
   weathercode: number;
   description: string;
+  humidity?: number;
 }
 
 export interface ForecastDay {
@@ -64,9 +65,110 @@ const mapWeatherCode = (code: number): string => {
   return 'Overcast conditions - general agricultural operations can proceed.';
 };
 
-export const fetchWeatherForDistrict = async (district: string): Promise<LiveWeatherData> => {
+const getOpenWeatherForecast = async (lat: number, lon: number, apiKey: string): Promise<{ current: LiveWeatherData & { humidity?: number }; forecast: ForecastDay[] }> => {
+  // Fetch current weather
+  const currentRes = await axios.get(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`);
+  const currentData = currentRes.data;
+  
+  const currentTemp = currentData.main.temp;
+  const currentHumidity = currentData.main.humidity;
+  const currentWindSpeed = currentData.wind.speed * 3.6; // m/s to km/h
+  const currentDescription = `Current conditions: ${currentData.weather[0].description}. Humidity is ${currentHumidity}%.`;
+  
+  // Fetch 5-day forecast
+  const forecastRes = await axios.get(`https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`);
+  const forecastList = forecastRes.data.list;
+  
+  // Group forecast points by date string (YYYY-MM-DD)
+  const grouped: { [date: string]: any[] } = {};
+  for (const item of forecastList) {
+    const dateStr = item.dt_txt.split(' ')[0];
+    if (!grouped[dateStr]) {
+      grouped[dateStr] = [];
+    }
+    grouped[dateStr].push(item);
+  }
+  
+  const forecastDays: ForecastDay[] = Object.keys(grouped).slice(0, 7).map((dateStr) => {
+    const items = grouped[dateStr];
+    let tempMax = -999;
+    let tempMin = 999;
+    let rainSum = 0;
+    let maxPop = 0;
+    let maxWind = 0;
+    const descCounts: { [desc: string]: number } = {};
+    
+    for (const item of items) {
+      if (item.main.temp_max > tempMax) tempMax = item.main.temp_max;
+      if (item.main.temp_min < tempMin) tempMin = item.main.temp_min;
+      if (item.rain && item.rain['3h']) rainSum += item.rain['3h'];
+      if (item.pop > maxPop) maxPop = item.pop;
+      const windKmh = item.wind.speed * 3.6;
+      if (windKmh > maxWind) maxWind = windKmh;
+      
+      const mainDesc = item.weather[0].main;
+      descCounts[mainDesc] = (descCounts[mainDesc] || 0) + 1;
+    }
+    
+    let bestDesc = 'Clear';
+    let maxCount = 0;
+    for (const desc of Object.keys(descCounts)) {
+      if (descCounts[desc] > maxCount) {
+        maxCount = descCounts[desc];
+        bestDesc = desc;
+      }
+    }
+    
+    let description = 'Clear sky - ideal for field work.';
+    if (bestDesc.toLowerCase().includes('rain')) {
+      description = 'Rainfall - suspend field watering operations. Check drainage.';
+    } else if (bestDesc.toLowerCase().includes('cloud')) {
+      description = 'Partly cloudy - suitable for irrigation and general maintenance.';
+    } else if (bestDesc.toLowerCase().includes('clear')) {
+      description = 'Clear sky - ideal for spraying and crop harvesting.';
+    } else if (bestDesc.toLowerCase().includes('mist') || bestDesc.toLowerCase().includes('fog')) {
+      description = 'Foggy conditions - high moisture, monitor closely for fungal pests.';
+    }
+    
+    return {
+      date: dateStr,
+      weathercode: bestDesc === 'Rain' ? 61 : bestDesc === 'Clouds' ? 3 : 0,
+      tempMax: Math.round(tempMax * 10) / 10,
+      tempMin: Math.round(tempMin * 10) / 10,
+      rainSum: Math.round(rainSum * 10) / 10,
+      rainProbability: Math.round(maxPop * 100),
+      windspeedMax: Math.round(maxWind * 10) / 10,
+      description,
+      humidity: items[0]?.main?.humidity || 65,
+    } as any;
+  });
+  
+  return {
+    current: {
+      temp: Math.round(currentTemp * 10) / 10,
+      windspeed: Math.round(currentWindSpeed * 10) / 10,
+      weathercode: currentData.weather[0].main === 'Rain' ? 61 : currentData.weather[0].main === 'Clouds' ? 3 : 0,
+      description: currentDescription,
+      humidity: currentHumidity,
+    },
+    forecast: forecastDays
+  };
+};
+
+export const fetchWeatherForDistrict = async (district: string): Promise<LiveWeatherData & { humidity?: number }> => {
   const normDistrict = district.trim().toLowerCase();
-  const coords = districtCoords[normDistrict] || { lat: 31.125, lon: 76.126 }; // Fallback coords
+  const coords = districtCoords[normDistrict] || { lat: 31.125, lon: 76.126 };
+
+  const apiKey = process.env.OPENWEATHER_API_KEY;
+  if (apiKey) {
+    try {
+      console.log('Using OpenWeather API key for district current weather...');
+      const data = await getOpenWeatherForecast(coords.lat, coords.lon, apiKey);
+      return data.current;
+    } catch (err: any) {
+      console.error('OpenWeather query failed, falling back to Open-Meteo: ', err.message);
+    }
+  }
 
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&current_weather=true`;
@@ -82,6 +184,7 @@ export const fetchWeatherForDistrict = async (district: string): Promise<LiveWea
       windspeed: current.windspeed,
       weathercode: current.weathercode,
       description: mapWeatherCode(current.weathercode),
+      humidity: 60, // fallback humidity for Open-Meteo
     };
   } catch (err: any) {
     console.error('Weather API query failed: ', err.message);
@@ -90,13 +193,29 @@ export const fetchWeatherForDistrict = async (district: string): Promise<LiveWea
       windspeed: 12.0,
       weathercode: 1,
       description: 'Partly cloudy - suitable for general farm management.',
+      humidity: 65,
     };
   }
 };
 
 export const fetchWeatherForecastForDistrict = async (district: string): Promise<FullWeatherData> => {
   const normDistrict = district.trim().toLowerCase();
-  const coords = districtCoords[normDistrict] || { lat: 31.125, lon: 76.126 }; // Fallback coords
+  const coords = districtCoords[normDistrict] || { lat: 31.125, lon: 76.126 };
+
+  const apiKey = process.env.OPENWEATHER_API_KEY;
+  if (apiKey) {
+    try {
+      console.log('Using OpenWeather API key for district forecast...');
+      const data = await getOpenWeatherForecast(coords.lat, coords.lon, apiKey);
+      return {
+        current: data.current,
+        forecast: data.forecast,
+        district,
+      };
+    } catch (err: any) {
+      console.error('OpenWeather forecast query failed, falling back to Open-Meteo: ', err.message);
+    }
+  }
 
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&daily=weathercode,temperature_2m_max,temperature_2m_min,rain_sum,precipitation_probability_max,windspeed_10m_max&current_weather=true&timezone=auto`;
@@ -108,6 +227,7 @@ export const fetchWeatherForecastForDistrict = async (district: string): Promise
       windspeed: data.current_weather.windspeed,
       weathercode: data.current_weather.weathercode,
       description: mapWeatherCode(data.current_weather.weathercode),
+      humidity: 60,
     };
 
     const forecast: ForecastDay[] = [];
@@ -133,13 +253,13 @@ export const fetchWeatherForecastForDistrict = async (district: string): Promise
     };
   } catch (err: any) {
     console.error('Weather forecast query failed: ', err.message);
-    // Return mock-friendly fallback data matching district coords but with safe values
     return {
       current: {
         temp: 30.0,
         windspeed: 10.0,
         weathercode: 0,
         description: 'Clear sky - ideal for field spraying and crop harvesting.',
+        humidity: 60,
       },
       forecast: Array.from({ length: 7 }).map((_, i) => {
         const d = new Date();

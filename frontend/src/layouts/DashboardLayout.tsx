@@ -82,10 +82,10 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
         { label: 'Dashboard', path: '/farmer', icon: LayoutDashboard },
         { label: 'AI Assistant', path: '/farmer/assistant', icon: MessageSquare },
         { label: 'Image Detection', path: '/farmer/image-detection', icon: ImageIcon },
-        { label: 'Weather Forecast', path: '/farmer/weather', icon: Cloud },
+        { label: 'Weather', path: '/farmer/weather', icon: Cloud },
         { label: 'Crop Advisory', path: '/farmer/advisory', icon: Sprout },
-        { label: 'Advisories & Alerts', path: '/farmer/alerts', icon: AlertTriangle },
-        { label: 'My Profile', path: '/farmer/profile', icon: UserIcon },
+        { label: 'Alerts', path: '/farmer/alerts', icon: AlertTriangle },
+        { label: 'Profile', path: '/farmer/profile', icon: UserIcon },
         { label: 'My Officers', path: '/farmer/officers', icon: Shield },
         { label: 'Community', path: '/farmer?tab=community', icon: Users },
         { label: 'Government Schemes', path: '/farmer?tab=schemes', icon: BookOpen },
@@ -140,9 +140,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
               </button>
 
               <Link to={getDashboardPath()} className="flex items-center space-x-2">
-                <div className="bg-emerald-600 p-2 rounded-xl text-amber-100 flex items-center justify-center">
-                  <Sprout className="w-5 h-5" />
-                </div>
+                <img src="/logo.png" alt="ARVA Logo" className="w-8 h-8 rounded-full object-cover" />
                 <span className="text-xl font-bold tracking-tight text-emerald-800">
                   ARVA
                 </span>
@@ -211,7 +209,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
               {/* Header */}
               <div className="p-4 border-b border-stone-250 flex justify-between items-center bg-gradient-to-r from-emerald-800 to-[#064e3b] text-stone-50">
                 <div className="flex items-center space-x-2">
-                  <Sprout className="w-5 h-5 text-amber-300" />
+                  <img src="/logo.png" alt="ARVA Logo" className="w-6 h-6 rounded-full object-cover" />
                   <span className="font-extrabold text-base tracking-tight">ARVA Menu Hub</span>
                 </div>
                 <button

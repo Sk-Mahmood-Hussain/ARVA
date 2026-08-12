@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -14,7 +14,8 @@ import {
   CheckCircle2,
   ArrowLeft,
   RefreshCw,
-  Award
+  Award,
+  Sparkles
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -36,19 +37,49 @@ export const Advisory: React.FC = () => {
   const navigate = useNavigate();
   const [advisory, setAdvisory] = useState<StructuredAdvisory | null>(null);
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [speechActive, setSpeechActive] = useState(false);
+  const speechActiveRef = useRef<boolean>(false);
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const updateSpeechActive = (val: boolean) => {
+    setSpeechActive(val);
+    speechActiveRef.current = val;
+  };
 
   const fetchAdvisory = async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await api.get('/ai/advisory');
-      setAdvisory(res.data.data.advisory);
+      if (res.data.data) {
+        setAdvisory(res.data.data.advisory);
+      } else {
+        setAdvisory(null);
+      }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to generate advisory.');
+      setError(err.response?.data?.message || 'Failed to load advisory.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const generateAdvisory = async () => {
+    setGenerating(true);
+    setError(null);
+    try {
+      const res = await api.post('/ai/advisory');
+      if (res.data.data) {
+        setAdvisory(res.data.data.advisory);
+        alert('AI crop advisory compiled successfully!');
+      } else {
+        setError('No advisory data returned.');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to compile AI crop recommendations. Please check your profile onboarding settings.');
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -59,47 +90,123 @@ export const Advisory: React.FC = () => {
   const handleSpeak = () => {
     if (!advisory) return;
 
-    if ('speechSynthesis' in window) {
-      if (speechActive) {
+    if (activeAudioRef.current) {
+      activeAudioRef.current.pause();
+      activeAudioRef.current = null;
+    }
+
+    if (speechActive) {
+      if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
-        setSpeechActive(false);
-        return;
       }
+      updateSpeechActive(false);
+      return;
+    }
 
+    if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      const parts = [
-        advisory.summary,
-        advisory.weatherImpact,
-        advisory.irrigation,
-        advisory.cropCare,
-        advisory.fertilizer,
-        advisory.pestRisk,
-        ...advisory.actions
-      ];
-      const speechText = parts.join('. ').replace(/[*#_`-]/g, '');
+    }
 
+    const parts = [
+      advisory.summary,
+      advisory.weatherImpact,
+      advisory.irrigation,
+      advisory.cropCare,
+      advisory.fertilizer,
+      advisory.pestRisk,
+      ...advisory.actions
+    ];
+    const speechText = parts.join('. ').replace(/[*#_`-]/g, '');
+
+    if (user?.language === 'pa') {
+      const voices = window.speechSynthesis.getVoices();
+      const punjabiVoice = voices.find(v => v.lang.toLowerCase().includes('pa') || v.name.toLowerCase().includes('punjabi'));
+
+      if (punjabiVoice) {
+        const utterance = new SpeechSynthesisUtterance(speechText);
+        utterance.voice = punjabiVoice;
+        utterance.lang = 'pa-IN';
+        utterance.onend = () => {
+          updateSpeechActive(false);
+        };
+        updateSpeechActive(true);
+        window.speechSynthesis.speak(utterance);
+      } else {
+        const sentences = speechText.split(/[।!?.·\n]+/).map(s => s.trim()).filter(Boolean);
+        if (sentences.length === 0) return;
+
+        let index = 0;
+        updateSpeechActive(true);
+
+        const playNextSentence = () => {
+          if (!speechActiveRef.current) return;
+          if (index >= sentences.length) {
+            updateSpeechActive(false);
+            return;
+          }
+
+          const currentText = sentences[index];
+          if (!currentText) {
+            index++;
+            playNextSentence();
+            return;
+          }
+
+          const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=pa&client=tw-ob&q=${encodeURIComponent(currentText.substring(0, 200))}`;
+          const audio = new Audio(url);
+          activeAudioRef.current = audio;
+
+          audio.onended = () => {
+            index++;
+            playNextSentence();
+          };
+
+          audio.onerror = () => {
+            const utterance = new SpeechSynthesisUtterance(currentText);
+            utterance.lang = 'pa-IN';
+            utterance.onend = () => {
+              index++;
+              playNextSentence();
+            };
+            window.speechSynthesis.speak(utterance);
+          };
+
+          audio.play().catch(() => {
+            const utterance = new SpeechSynthesisUtterance(currentText);
+            utterance.lang = 'pa-IN';
+            utterance.onend = () => {
+              index++;
+              playNextSentence();
+            };
+            window.speechSynthesis.speak(utterance);
+          });
+        };
+
+        playNextSentence();
+      }
+    } else {
       const utterance = new SpeechSynthesisUtterance(speechText);
       if (user?.language === 'hi') {
         utterance.lang = 'hi-IN';
-      } else if (user?.language === 'pa') {
-        utterance.lang = 'pa-IN';
       } else {
         utterance.lang = 'en-US';
       }
 
       utterance.onend = () => {
-        setSpeechActive(false);
+        updateSpeechActive(false);
       };
 
-      setSpeechActive(true);
+      updateSpeechActive(true);
       window.speechSynthesis.speak(utterance);
-    } else {
-      alert('Text-to-Speech is not supported in your browser.');
     }
   };
 
   useEffect(() => {
     return () => {
+      if (activeAudioRef.current) {
+        activeAudioRef.current.pause();
+        activeAudioRef.current = null;
+      }
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
@@ -123,12 +230,24 @@ export const Advisory: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px]">
         <Loader2 className="animate-spin w-8 h-8 text-emerald-600 mb-2" />
-        <span className="text-stone-500 font-semibold text-sm">Generating custom advisory...</span>
+        <span className="text-stone-500 font-semibold text-sm">Checking crop advisory...</span>
       </div>
     );
   }
 
-  if (error || !advisory) {
+  if (generating) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+        <Loader2 className="animate-spin w-10 h-10 text-emerald-600" />
+        <div className="text-center">
+          <span className="text-stone-700 font-extrabold text-sm block">Generating custom AI advisory...</span>
+          <span className="text-stone-400 text-xs mt-1 block">ARVA is analyzing weather parameters, soil constraints, and growth stage...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !advisory) {
     return (
       <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6">
         <div className="bg-red-50 border border-red-200 text-red-800 p-6 rounded-3xl text-center space-y-4">
@@ -137,12 +256,44 @@ export const Advisory: React.FC = () => {
           <p className="text-sm">{error || 'Please complete onboarding settings before generating crop advisories.'}</p>
           <button
             onClick={fetchAdvisory}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-full shadow-sm text-sm font-bold text-stone-50 bg-red-750 hover:bg-red-800"
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-full shadow-sm text-sm font-bold text-stone-50 bg-red-750 hover:bg-red-800 gap-1.5"
           >
-            <RefreshCw className="w-4 h-4 mr-2" /> Retry Advisory
+            <RefreshCw className="w-4 h-4" /> Retry
           </button>
         </div>
       </div>
+    );
+  }
+
+  if (!advisory) {
+    return (
+      <main className="max-w-4xl mx-auto py-8 px-4 sm:px-6 space-y-6">
+        <div className="flex items-center space-x-3 border-b border-stone-200 pb-4">
+          <button
+            onClick={() => navigate('/farmer')}
+            className="p-2 border border-stone-300 hover:bg-stone-50 rounded-xl transition-colors cursor-pointer"
+            title="Go Back"
+          >
+            <ArrowLeft className="w-4 h-4 text-stone-600" />
+          </button>
+          <h1 className="text-2xl font-extrabold text-stone-900 tracking-tight">Smart Crop Advisory</h1>
+        </div>
+        <div className="bg-[#ffffff] border border-stone-200 p-8 rounded-3xl text-center space-y-6 shadow-sm">
+          <Sprout className="w-16 h-16 text-emerald-600 mx-auto animate-pulse" />
+          <div className="space-y-2">
+            <h2 className="text-xl font-extrabold text-stone-900 tracking-tight">No Crop Advisory Active</h2>
+            <p className="text-xs text-stone-500 max-w-sm mx-auto font-semibold leading-relaxed">
+              ARVA will analyze your block coordinates, soil type, irrigation system, and the current weather forecast to compile personalized recommendations.
+            </p>
+          </div>
+          <button
+            onClick={generateAdvisory}
+            className="inline-flex items-center px-6 py-3 border border-transparent rounded-xl shadow-md text-sm font-bold text-stone-50 bg-emerald-600 hover:bg-emerald-700 transition-all cursor-pointer gap-2"
+          >
+            <Sparkles className="w-4 h-4" /> Get Crop Advice
+          </button>
+        </div>
+      </main>
     );
   }
 
@@ -169,26 +320,37 @@ export const Advisory: React.FC = () => {
           </div>
         </div>
 
-        <button
-          onClick={handleSpeak}
-          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
-            speechActive
-              ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100 animate-pulse'
-              : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
-          }`}
-        >
-          {speechActive ? (
-            <>
-              <VolumeX className="w-4 h-4 text-red-600" />
-              <span>Stop Reading</span>
-            </>
-          ) : (
-            <>
-              <Volume2 className="w-4 h-4 text-emerald-700" />
-              <span>Listen Advisory</span>
-            </>
-          )}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={generateAdvisory}
+            disabled={generating}
+            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-stone-50 rounded-xl text-xs font-bold transition-all border border-emerald-500 cursor-pointer shadow-sm"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>Regenerate Advice</span>
+          </button>
+          
+          <button
+            onClick={handleSpeak}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+              speechActive
+                ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100 animate-pulse'
+                : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+            }`}
+          >
+            {speechActive ? (
+              <>
+                <VolumeX className="w-4 h-4 text-red-600" />
+                <span>Stop Reading</span>
+              </>
+            ) : (
+              <>
+                <Volume2 className="w-4 h-4 text-emerald-700" />
+                <span>Listen Advisory</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Advisory Overview Card */}

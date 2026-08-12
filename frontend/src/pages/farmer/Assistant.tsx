@@ -54,6 +54,13 @@ export const Assistant: React.FC = () => {
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<any>(null);
+  const speechActiveIdRef = useRef<string | null>(null);
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const updateSpeechActiveId = (id: string | null) => {
+    setSpeechActiveId(id);
+    speechActiveIdRef.current = id;
+  };
 
   // Load conversations initially
   const loadConversations = async () => {
@@ -145,34 +152,123 @@ export const Assistant: React.FC = () => {
 
   // Text to Speech
   const handleSpeak = (textId: string, text: string) => {
-    if ('speechSynthesis' in window) {
-      if (speechActiveId === textId) {
+    if (activeAudioRef.current) {
+      activeAudioRef.current.pause();
+      activeAudioRef.current = null;
+    }
+
+    if (speechActiveId === textId) {
+      if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
-        setSpeechActiveId(null);
-        return;
       }
-      
+      updateSpeechActiveId(null);
+      return;
+    }
+
+    if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      const cleanText = text.replace(/[*#_`-]/g, ''); // strip markdown chars
+    }
+
+    let speechText = text;
+    try {
+      if (text.trim().startsWith('{')) {
+        const parsed = JSON.parse(text);
+        const parts = [
+          parsed.cropStatus,
+          parsed.irrigation,
+          parsed.weatherImpact,
+          parsed.pestRisk,
+          parsed.cropCare,
+          parsed.important,
+          parsed.whatToDo
+        ].filter(Boolean);
+        speechText = parts.join('. ');
+      }
+    } catch (e) {
+      speechText = text;
+    }
+    const cleanText = speechText.replace(/[*#_`-]/g, '');
+
+    if (user?.language === 'pa') {
+      const voices = window.speechSynthesis.getVoices();
+      const punjabiVoice = voices.find(v => v.lang.toLowerCase().includes('pa') || v.name.toLowerCase().includes('punjabi'));
+
+      if (punjabiVoice) {
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.voice = punjabiVoice;
+        utterance.lang = 'pa-IN';
+        utterance.onend = () => {
+          updateSpeechActiveId(null);
+        };
+        updateSpeechActiveId(textId);
+        window.speechSynthesis.speak(utterance);
+      } else {
+        const sentences = cleanText.split(/[।!?.·\n]+/).map(s => s.trim()).filter(Boolean);
+        if (sentences.length === 0) return;
+
+        let index = 0;
+        updateSpeechActiveId(textId);
+
+        const playNextSentence = () => {
+          if (speechActiveIdRef.current !== textId) return;
+          if (index >= sentences.length) {
+            updateSpeechActiveId(null);
+            return;
+          }
+
+          const currentText = sentences[index];
+          if (!currentText) {
+            index++;
+            playNextSentence();
+            return;
+          }
+
+          const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=pa&client=tw-ob&q=${encodeURIComponent(currentText.substring(0, 200))}`;
+          const audio = new Audio(url);
+          activeAudioRef.current = audio;
+
+          audio.onended = () => {
+            index++;
+            playNextSentence();
+          };
+
+          audio.onerror = () => {
+            const utterance = new SpeechSynthesisUtterance(currentText);
+            utterance.lang = 'pa-IN';
+            utterance.onend = () => {
+              index++;
+              playNextSentence();
+            };
+            window.speechSynthesis.speak(utterance);
+          };
+
+          audio.play().catch(() => {
+            const utterance = new SpeechSynthesisUtterance(currentText);
+            utterance.lang = 'pa-IN';
+            utterance.onend = () => {
+              index++;
+              playNextSentence();
+            };
+            window.speechSynthesis.speak(utterance);
+          });
+        };
+
+        playNextSentence();
+      }
+    } else {
       const utterance = new SpeechSynthesisUtterance(cleanText);
-      
-      // Set lang
       if (user?.language === 'hi') {
         utterance.lang = 'hi-IN';
-      } else if (user?.language === 'pa') {
-        utterance.lang = 'pa-IN';
       } else {
         utterance.lang = 'en-US';
       }
 
       utterance.onend = () => {
-        setSpeechActiveId(null);
+        updateSpeechActiveId(null);
       };
 
-      setSpeechActiveId(textId);
+      updateSpeechActiveId(textId);
       window.speechSynthesis.speak(utterance);
-    } else {
-      alert('Text-to-Speech is not supported in your browser.');
     }
   };
 
@@ -203,9 +299,18 @@ export const Assistant: React.FC = () => {
     e.preventDefault();
     if (!inputText.trim() && !selectedImage) return;
 
-    setSending(true);
     const msgText = inputText;
     setInputText('');
+
+    const tempUserMsg: Message = {
+      id: 'temp-user-msg-' + Date.now(),
+      sender: 'FARMER',
+      content: msgText,
+      imageUrl: imagePreview,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempUserMsg]);
+    setSending(true);
 
     try {
       const formData = new FormData();
@@ -235,6 +340,46 @@ export const Assistant: React.FC = () => {
       }
     } catch (err: any) {
       alert(err.response?.data?.message || 'AI assistant request failed.');
+      // Remove temp message if failed
+      setMessages((prev) => prev.filter(m => m.id !== tempUserMsg.id));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleSendSuggestion = async (query: string) => {
+    const tempUserMsg: Message = {
+      id: 'temp-user-msg-' + Date.now(),
+      sender: 'FARMER',
+      content: query,
+      imageUrl: null,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, tempUserMsg]);
+    setSending(true);
+
+    try {
+      const formData = new FormData();
+      if (activeConvId) {
+        formData.append('conversationId', activeConvId);
+      }
+      formData.append('message', query);
+
+      const res = await api.post('/ai/chat', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const newId = res.data.data.conversationId;
+      if (!activeConvId) {
+        setActiveConvId(newId);
+        loadConversations();
+      } else {
+        const details = await api.get(`/ai/conversations/${activeConvId}`);
+        setMessages(details.data.data.messages);
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'AI assistant request failed.');
+      setMessages((prev) => prev.filter(m => m.id !== tempUserMsg.id));
     } finally {
       setSending(false);
     }
@@ -362,6 +507,14 @@ export const Assistant: React.FC = () => {
           <div className="flex-grow p-4 sm:p-6 overflow-y-auto space-y-4 bg-[#fdfbf7]/40">
             {messages.map((msg) => {
               const isUser = msg.sender === 'FARMER';
+              let parsedContent: any = null;
+              if (!isUser) {
+                try {
+                  parsedContent = JSON.parse(msg.content);
+                } catch (e) {
+                  parsedContent = { important: msg.content };
+                }
+              }
               const showEscalation = !isUser && containsEscalationTrigger(msg.content);
               return (
                 <div key={msg.id} className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} space-y-1`}>
@@ -384,7 +537,54 @@ export const Assistant: React.FC = () => {
                           <img src={msg.imageUrl} alt="uploaded visual" className="w-full object-cover" />
                         </div>
                       )}
-                      <p>{msg.content}</p>
+                      {isUser ? (
+                        <p>{msg.content}</p>
+                      ) : (
+                        <div className="space-y-3 min-w-[200px]">
+                          {parsedContent.cropStatus && (
+                            <div className="bg-emerald-50/50 p-2.5 rounded-xl border border-emerald-100/50">
+                              <span className="block text-[10px] font-extrabold text-emerald-800 uppercase tracking-wide">Crop Status</span>
+                              <p className="mt-0.5 text-stone-800 text-[13px]">{parsedContent.cropStatus}</p>
+                            </div>
+                          )}
+                          {parsedContent.irrigation && (
+                            <div className="bg-sky-50/50 p-2.5 rounded-xl border border-sky-100/50">
+                              <span className="block text-[10px] font-extrabold text-sky-800 uppercase tracking-wide">Irrigation Advice</span>
+                              <p className="mt-0.5 text-stone-800 text-[13px]">{parsedContent.irrigation}</p>
+                            </div>
+                          )}
+                          {parsedContent.weatherImpact && (
+                            <div className="bg-amber-50/50 p-2.5 rounded-xl border border-amber-100/50">
+                              <span className="block text-[10px] font-extrabold text-amber-800 uppercase tracking-wide">Weather Impact</span>
+                              <p className="mt-0.5 text-stone-800 text-[13px]">{parsedContent.weatherImpact}</p>
+                            </div>
+                          )}
+                          {parsedContent.pestRisk && (
+                            <div className="bg-rose-50/50 p-2.5 rounded-xl border border-rose-100/50">
+                              <span className="block text-[10px] font-extrabold text-rose-800 uppercase tracking-wide">Pest & Disease Risk</span>
+                              <p className="mt-0.5 text-stone-800 text-[13px]">{parsedContent.pestRisk}</p>
+                            </div>
+                          )}
+                          {parsedContent.cropCare && (
+                            <div className="bg-purple-50/50 p-2.5 rounded-xl border border-purple-100/50">
+                              <span className="block text-[10px] font-extrabold text-purple-800 uppercase tracking-wide">Crop Care & Nutrition</span>
+                              <p className="mt-0.5 text-stone-800 text-[13px]">{parsedContent.cropCare}</p>
+                            </div>
+                          )}
+                          {parsedContent.important && (
+                            <div className="bg-red-50/50 p-2.5 rounded-xl border border-red-150">
+                              <span className="block text-[10px] font-extrabold text-red-800 uppercase tracking-wide">Important Notice</span>
+                              <p className="mt-0.5 text-stone-800 text-[13px] font-bold">{parsedContent.important}</p>
+                            </div>
+                          )}
+                          {parsedContent.whatToDo && (
+                            <div className="bg-stone-50 p-2.5 rounded-xl border border-stone-200">
+                              <span className="block text-[10px] font-extrabold text-stone-750 uppercase tracking-wide">Action Plan</span>
+                              <p className="mt-0.5 text-stone-800 text-[13px] leading-relaxed whitespace-pre-wrap">{parsedContent.whatToDo}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Text-to-speech option */}
                       {!isUser && (
@@ -435,15 +635,44 @@ export const Assistant: React.FC = () => {
             })}
 
             {messages.length === 0 && !loadingMsgs && (
-              <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-4 max-w-sm mx-auto my-12 animate-fade-in">
+              <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-4 max-w-md mx-auto my-6 animate-fade-in">
                 <div className="bg-emerald-50 p-4 rounded-full text-emerald-700 border border-emerald-100 shadow-inner">
-                  <Sprout className="w-10 h-10" />
+                  <Sprout className="w-10 h-10 animate-bounce" />
                 </div>
                 <div>
                   <h4 className="font-extrabold text-stone-850 text-base">ARVA Crop AI Advisory</h4>
                   <p className="text-xs text-stone-500 mt-1 leading-relaxed">
                     Ask weather-aware agricultural questions, upload leaf disease images for diagnosis, and escalate cases to crop experts in Punjabi, Hindi, or English.
                   </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full pt-4">
+                  {[
+                    "What is the best irrigation timing for my crop under current weather?",
+                    "How can I prevent early blight disease in tomato crops?",
+                    "Are there any active government subsidy schemes in my region?",
+                    "How do I optimize fertilizer application based on my soil?"
+                  ].map((q, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleSendSuggestion(q)}
+                      className="p-3 bg-stone-50 hover:bg-emerald-50 border border-stone-200 hover:border-emerald-350 rounded-2xl text-left text-xs font-semibold text-stone-700 hover:text-emerald-950 transition-all cursor-pointer shadow-sm"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {sending && (
+              <div className="flex items-start space-x-2 max-w-[85%]">
+                <div className="bg-emerald-50 border border-emerald-100 p-1.5 rounded-lg text-emerald-800 shrink-0">
+                  <Sprout className="w-4 h-4" />
+                </div>
+                <div className="p-3.5 bg-[#ffffff] border border-stone-200 text-stone-850 rounded-3xl rounded-tl-none shadow-sm flex items-center space-x-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                  <span className="text-xs text-stone-500 font-semibold">ARVA is analyzing context and formulating recommendations...</span>
                 </div>
               </div>
             )}

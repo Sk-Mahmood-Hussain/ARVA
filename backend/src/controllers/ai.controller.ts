@@ -45,19 +45,130 @@ export const startOrContinueChat = async (
       });
     }
 
+    // Look up user language preference
+    const userDb = await prisma.user.findUnique({
+      where: { id: req.user.id }
+    });
+    const lang = userDb?.language || 'en';
+
+    // 1. AGRICULTURAL GUARDRAIL CHECK
+    const msgLower = (message || '').toLowerCase();
+    const isGreeting = ['hi', 'hello', 'hey', 'greetings', 'namaste', 'arva', 'sat sri akal', 'satsriakal'].some(g => msgLower === g || msgLower.startsWith(g + ' ') || msgLower.startsWith(g + ','));
+    const agriKeywords = [
+      'crop', 'farm', 'soil', 'water', 'irrigate', 'fertilizer', 'pest', 'disease', 'weather', 'rain',
+      'temp', 'scheme', 'subsidy', 'officer', 'appointment', 'advisory', 'village', 'seed', 'wheat',
+      'paddy', 'rice', 'maize', 'cotton', 'sugarcane', 'harvest', 'sow', 'drip', 'canal', 'spraying',
+      'fungus', 'insect', 'blight', 'rust', 'fertilise', 'subsidy', 'government', 'land', 'acre',
+      'urea', 'potash', 'nitrogen', 'phosphorus', 'pesticide', 'herbicide', 'tractor', 'yield',
+      'cultivate', 'climate', 'wind', 'humidity', 'broadcast', 'alert', 'help', 'punjabi', 'hindi'
+    ];
+    const isAgriRelated = agriKeywords.some(kw => msgLower.includes(kw));
+
+    if (!isGreeting && !isAgriRelated && !req.file) {
+      const guardrailText = lang === 'pa' 
+        ? 'ਮੈਂ ਮੁੱਖ ਤੌਰ ਤੇ ਖੇਤੀਬਾੜੀ, ਫਸਲਾਂ, ਮੌਸਮ, ਸਰਕਾਰੀ ਸਕੀਮਾਂ ਅਤੇ ਖੇਤੀ ਸੇਵਾਵਾਂ ਵਿੱਚ ਤੁਹਾਡੀ ਮਦਦ ਕਰ ਸਕਦਾ ਹਾਂ।'
+        : lang === 'hi'
+        ? 'मैं मुख्य रूप से खेती, फसलों, मौसम, सरकारी योजनाओं और कृषि सेवाओं में आपकी मदद कर सकता हूं।'
+        : 'I can mainly help with farming, crops, weather, schemes and agricultural services.';
+      
+      const structuredGuardrail = JSON.stringify({ important: guardrailText });
+      
+      await prisma.aIMessage.create({
+        data: {
+          conversationId: conversation.id,
+          sender: Role.FARMER,
+          content: message || 'Attachment sent.',
+        },
+      });
+
+      const savedAiMsg = await prisma.aIMessage.create({
+        data: {
+          conversationId: conversation.id,
+          sender: Role.ADMIN,
+          content: structuredGuardrail,
+        },
+      });
+
+      return res.status(200).json({
+        status: 'success',
+        data: {
+          conversationId: conversation.id,
+          reply: structuredGuardrail,
+          messageId: savedAiMsg.id,
+        },
+      });
+    }
+
+    // 2. RETRIEVE REAL APPLICATION CONTEXT FROM DATABASE
+    const farmerProfile = await prisma.farmerProfile.findUnique({
+      where: { id: req.user.id },
+      include: {
+        region: {
+          include: {
+            broadcasts: {
+              where: { status: 'PUBLISHED' },
+              orderBy: { createdAt: 'desc' },
+              take: 5
+            },
+            officers: {
+              include: {
+                user: true
+              }
+            }
+          }
+        }
+      }
+    }) as any;
+
+    const schemes = await prisma.scheme.findMany({
+      where: { status: 'PUBLISHED' },
+      take: 5
+    });
+
+    let weatherInfo = null;
+    if (farmerProfile?.region?.district) {
+      try {
+        const { fetchWeatherForecastForDistrict } = require('../services/weather.service');
+        weatherInfo = await fetchWeatherForecastForDistrict(farmerProfile.region.district);
+      } catch (err) {
+        console.error('Failed to retrieve weather for chat context injection:', err);
+      }
+    }
+
+    const dbContext = `
+    FARMER PROFILE CONTEXT:
+    - Name: ${req.user.name}
+    - Location: State of ${farmerProfile?.region?.state || 'Punjab'}, District of ${farmerProfile?.region?.district || 'Patiala'}, Block of ${farmerProfile?.region?.block || 'N/A'}, Village of ${farmerProfile?.region?.village || 'N/A'}
+    - Land Size: ${farmerProfile?.landSize || '1.0'} acres
+    - Soil Type: ${farmerProfile?.soilType || 'Loamy'}
+    - Irrigation Type: ${farmerProfile?.irrigationType || 'Tube Well'}
+    - Primary Sown Crop: ${farmerProfile?.primaryCrop || 'Wheat'}
+    - Crop Growth Stage: ${farmerProfile?.cropGrowthStage || 'Sowing'}
+
+    REGIONAL ACTIVE ALERTS (BROADCASTS):
+    ${farmerProfile?.region?.broadcasts?.map((b: any) => `- TITLE: ${b.title}, MESSAGE: ${b.message}, PRIORITY: ${b.priority}`).join('\n') || 'None active'}
+
+    AVAILABLE GOVERNMENT SCHEMES:
+    ${schemes.map((s: any) => `- NAME: ${s.title}, DESCRIPTION: ${s.description}, SUBSIDY: ${s.subsidyAmount || 'Varies'}`).join('\n') || 'None listed'}
+
+    CURRENT WEATHER FORECAST IN DISTRICT:
+    ${weatherInfo ? `Temp: ${weatherInfo.current.temp}°C, Wind: ${weatherInfo.current.windspeed} km/h, Conditions: ${weatherInfo.current.description}` : 'Unavailable'}
+    
+    ASSIGNED AGRICULTURE OFFICERS:
+    ${farmerProfile?.region?.officers?.map((o: any) => `- NAME: ${o.user.name}, DESIGNATION: ${o.designation || 'Officer'}, DEPT: ${o.department || 'Agriculture'}, PHONE: ${o.user.phoneNumber || 'N/A'}`).join('\n') || 'None assigned'}
+    `;
+
     // Load past messages
     const pastMessages = await prisma.aIMessage.findMany({
       where: { conversationId: conversation.id },
       orderBy: { createdAt: 'asc' },
     });
 
-    // Handle Image Upload if present
     let imageUrl: string | undefined = undefined;
     if (req.file) {
       imageUrl = await uploadToCloudinary(req.file.buffer, 'arva_ai_analysis');
     }
 
-    // Format for Gemini API
     const formattedMessages: AIMessageInput[] = [];
 
     // Add conversation history
@@ -84,23 +195,50 @@ export const startOrContinueChat = async (
       });
     }
 
-    // Look up user language preference
-    const userDb = await prisma.user.findUnique({
-      where: { id: req.user.id }
-    });
-    const lang = userDb?.language || 'en';
-
     const customSystem = `You are ARVA AI, a smart crop advisory assistant for farmers in Punjab.
     
+    You MUST respond with a structured JSON object. Do not output any plain text outside the JSON structure.
+    The JSON structure must support these optional keys representing different advisory cards:
+    {
+      "cropStatus": "string, current state/status of crop",
+      "irrigation": "string, watering and irrigation advice",
+      "weatherImpact": "string, weather warnings or impacts",
+      "pestRisk": "string, pest/disease risk and diagnostics advice",
+      "cropCare": "string, general care and fertilizer instructions",
+      "important": "string, any critical warnings or important notice",
+      "whatToDo": "string, concise bullet list or plan of action"
+    }
+
     AI SAFETY & FORMATTING INSTRUCTIONS:
-    1. Translate your response completely into the user's preferred language: "${lang}" (use clear Punjabi/Gurmukhi script if 'pa', Hindi/Devanagari if 'hi', or English if 'en').
-    2. Do NOT use any markdown characters (no ##, no **, no ###, no ---, no \`\`) in your response. Keep the reply in clean, plain text formatting. Use standard spaces, linebreaks, and simple dash bullets if lists are needed.
-    3. Keep sentences very short and vocabulary simple for low-literacy farmers. One clear action per point.
-    4. If the user query is about crop diseases or pest identification and you are not 100% sure based on the local knowledge, you MUST clearly state: 'I am not fully certain about this diagnosis. I highly recommend requesting officer verification by clicking the "Escalate to Officer" button below.'
-    5. If recommending chemical pesticides, always add a safety warning: 'Always read label instructions, wear protective gear, and consult your assigned Agriculture Officer before spraying.'`;
+    1. Translate the values of your JSON response completely into the user's preferred language: "${lang}" (use clear Punjabi/Gurmukhi script if 'pa', Hindi/Devanagari if 'hi', or English if 'en').
+    2. Do NOT use any markdown formatting characters in your string values. Use standard spaces, linebreaks, and simple bullet characters if lists are needed.
+    3. Keep sentences very short and vocabulary simple for low-literacy farmers.
+    4. Rely on the following database details to provide accurate and specific advice instead of inventing general facts:
+    
+    ${dbContext}
+
+    5. If the user query is about crop diseases or pest identification and you are not 100% sure, you MUST write in the "important" or "pestRisk" key: 'I am not fully certain about this diagnosis. I highly recommend requesting officer verification by clicking the "Escalate to Officer" button below.'
+    6. If recommending chemical pesticides, always add a safety warning: 'Always read label instructions, wear protective gear, and consult your assigned Agriculture Officer before spraying.'`;
 
     // Query Gemini
     const aiReply = await queryOpenRouterGemini(formattedMessages, customSystem);
+
+    let structuredReply;
+    try {
+      let cleanedReply = aiReply.replace(/```json/gi, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(cleanedReply);
+      if (typeof parsed === 'object' && parsed !== null) {
+        structuredReply = parsed;
+      } else {
+        throw new Error('Not an object');
+      }
+    } catch (e) {
+      structuredReply = {
+        important: aiReply
+      };
+    }
+
+    const replyContent = JSON.stringify(structuredReply);
 
     // Save messages in database
     await prisma.aIMessage.create({
@@ -115,8 +253,8 @@ export const startOrContinueChat = async (
     const savedAiMsg = await prisma.aIMessage.create({
       data: {
         conversationId: conversation.id,
-        sender: Role.ADMIN, // Storing AI responses as ADMIN/SYSTEM role
-        content: aiReply,
+        sender: Role.ADMIN, 
+        content: replyContent,
       },
     });
 
@@ -124,7 +262,7 @@ export const startOrContinueChat = async (
       status: 'success',
       data: {
         conversationId: conversation.id,
-        reply: aiReply,
+        reply: replyContent,
         imageUrl,
         messageId: savedAiMsg.id,
       },

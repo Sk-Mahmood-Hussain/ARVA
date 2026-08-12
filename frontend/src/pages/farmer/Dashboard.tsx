@@ -8,12 +8,10 @@ import api from '../../services/api';
 import type { FarmerProfile } from '../../types';
 import {
   User as UserIcon,
-  Sprout,
   ShieldAlert,
   Phone,
   Mail,
   MapPin,
-  Award,
   BookOpen,
   Calendar,
   Users,
@@ -28,14 +26,8 @@ import {
   Shield,
   ChevronLeft,
   ChevronRight,
-  Sparkles,
-  History,
-  Droplets,
-  FlaskConical,
-  Bug,
-  CheckSquare,
   AlertTriangle,
-  X
+  Cloud
 } from 'lucide-react';
 
 // ==========================================
@@ -104,13 +96,22 @@ export const FarmerDashboard: React.FC = () => {
   const [loadingRegions, setLoadingRegions] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
 
-  const [advisory, setAdvisory] = useState<any | null>(null);
-  const [loadingAdvisory, setLoadingAdvisory] = useState(false);
-  const [advisoryError, setAdvisoryError] = useState<string | null>(null);
-  const [advisoryHistory, setAdvisoryHistory] = useState<any[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
-  const [selectedHistoryAdvisory, setSelectedHistoryAdvisory] = useState<any | null>(null);
   const [currentOfficerIndex, setCurrentOfficerIndex] = useState(0);
+
+  const [weather, setWeather] = useState<any | null>(null);
+  const [loadingWeather, setLoadingWeather] = useState(false);
+
+  const fetchWeather = async () => {
+    setLoadingWeather(true);
+    try {
+      const res = await api.get('/weather');
+      setWeather(res.data.data);
+    } catch (err) {
+      console.error('Failed to load weather data:', err);
+    } finally {
+      setLoadingWeather(false);
+    }
+  };
 
   // Setup Form
   const {
@@ -160,43 +161,7 @@ export const FarmerDashboard: React.FC = () => {
     fetchDashboardData();
   }, [user]);
 
-  const fetchAdvisoryData = async () => {
-    setLoadingAdvisory(true);
-    setAdvisoryError(null);
-    try {
-      const res = await api.get('/ai/advisory');
-      setAdvisory(res.data.data);
-    } catch (err: any) {
-      console.error(err);
-      setAdvisoryError(err.response?.data?.message || 'Failed to load crop advisory');
-    } finally {
-      setLoadingAdvisory(false);
-    }
-  };
 
-  const generateAdvisoryData = async () => {
-    setLoadingAdvisory(true);
-    setAdvisoryError(null);
-    try {
-      const res = await api.post('/ai/advisory');
-      setAdvisory(res.data.data);
-      fetchAdvisoryHistory();
-    } catch (err: any) {
-      console.error(err);
-      setAdvisoryError(err.response?.data?.message || 'Failed to compile AI crop recommendations. Please check your internet connectivity or profile setup.');
-    } finally {
-      setLoadingAdvisory(false);
-    }
-  };
-
-  const fetchAdvisoryHistory = async () => {
-    try {
-      const res = await api.get('/ai/advisory/history');
-      setAdvisoryHistory(res.data.data);
-    } catch (err) {
-      console.error('Failed to load historical reports:', err);
-    }
-  };
 
   // Mapped Officer Carousel auto-sliding effect
   useEffect(() => {
@@ -215,15 +180,13 @@ export const FarmerDashboard: React.FC = () => {
     }
   }, [activeTab]);
 
-  // Load Tab specific data
   useEffect(() => {
     if (activeTab === 'dashboard') {
-      // Load recent broadcasts & notifications & appointments & RAG advisory
+      // Load recent broadcasts & notifications & appointments & weather
       api.get('/broadcasts').then((r) => setBroadcasts(r.data.data.slice(0, 3))).catch(console.error);
       api.get('/notifications').then((r) => setNotifications(r.data.data.slice(0, 3))).catch(console.error);
       api.get('/appointments').then((r) => setAppointments(r.data.data.slice(0, 3))).catch(console.error);
-      fetchAdvisoryData();
-      fetchAdvisoryHistory();
+      fetchWeather();
     } else if (activeTab === 'notifications') {
       api.get('/notifications').then((r) => setNotifications(r.data.data)).catch(console.error);
     } else if (activeTab === 'broadcasts') {
@@ -505,322 +468,72 @@ export const FarmerDashboard: React.FC = () => {
             {/* Left Metrics column */}
             <div className="lg:col-span-2 space-y-8">
               
-              {/* Smart Crop & Weather Advisory Card */}
-              <div className="bg-[#ffffff] border border-stone-200 shadow-sm rounded-3xl p-6 space-y-6">
-                <div className="flex justify-between items-center border-b border-stone-200 pb-3">
-                  <h3 className="text-lg font-bold text-stone-900 flex items-center">
-                    <Sprout className="w-5 h-5 mr-2 text-emerald-700" />
-                    Agricultural Advisory System
-                  </h3>
-                  {advisory && (
-                    <button
-                      onClick={generateAdvisoryData}
-                      disabled={loadingAdvisory}
-                      className="text-xs text-emerald-750 hover:text-emerald-900 font-extrabold cursor-pointer disabled:opacity-50 inline-flex items-center space-x-1 border border-emerald-250 bg-emerald-50/50 px-3 py-1.5 rounded-full transition-all"
-                    >
-                      {loadingAdvisory ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
-                      ) : (
-                        <Sparkles className="w-3.5 h-3.5 mr-1 text-emerald-600" />
-                      )}
-                      <span>Get Fresh AI Advice</span>
-                    </button>
-                  )}
+              {/* Weather Card */}
+              {loadingWeather ? (
+                <div className="bg-[#ffffff] border border-stone-200 shadow-sm rounded-3xl p-6 flex flex-col items-center justify-center py-12">
+                  <Loader2 className="animate-spin w-6 h-6 text-emerald-600 mb-2" />
+                  <span className="text-stone-400 text-xs font-semibold">Loading current weather...</span>
                 </div>
-
-                {advisoryError && (
-                  <div className="bg-red-50 border border-red-250 text-red-800 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                    <div className="flex items-center space-x-2 text-xs font-semibold">
-                      <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
-                      <span>{advisoryError}</span>
+              ) : weather ? (
+                <div className="bg-[#ffffff] border border-stone-200 shadow-sm rounded-3xl p-6 space-y-4">
+                  <h3 className="text-lg font-bold text-stone-900 flex items-center border-b border-stone-200 pb-2">
+                    <Cloud className="w-5 h-5 mr-2 text-emerald-700" />
+                    Current Weather
+                  </h3>
+                  <div className="bg-gradient-to-br from-emerald-800 to-emerald-950 text-white p-5 rounded-2xl shadow-sm space-y-4">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-wider block">Location</span>
+                        <p className="text-sm font-extrabold flex items-center">
+                          <MapPin className="w-3.5 h-3.5 mr-1 text-amber-300" />
+                          {weather.district}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-wider block">Condition</span>
+                        <span className="text-xs font-bold">{weather.current.description || 'Clear sky'}</span>
+                      </div>
                     </div>
+                    
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2 border-t border-emerald-700/50">
+                      <div>
+                        <span className="block text-[9px] font-bold text-emerald-300 uppercase">Temp</span>
+                        <span className="text-lg font-extrabold">{weather.current.temp}°C</span>
+                      </div>
+                      <div>
+                        <span className="block text-[9px] font-bold text-emerald-300 uppercase">Wind</span>
+                        <span className="text-sm font-extrabold">{weather.current.windspeed} km/h</span>
+                      </div>
+                      <div>
+                        <span className="block text-[9px] font-bold text-emerald-300 uppercase">Humidity</span>
+                        <span className="text-sm font-extrabold">{weather.current.humidity || weather.humidity || 65}%</span>
+                      </div>
+                      <div>
+                        <span className="block text-[9px] font-bold text-emerald-300 uppercase">Rain Prob</span>
+                        <span className="text-sm font-extrabold">{weather.forecast?.[0]?.rainProbability || 0}%</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-3">
                     <button
-                      onClick={generateAdvisoryData}
-                      className="px-3.5 py-1.5 bg-red-700 hover:bg-red-850 text-stone-50 text-xs font-bold rounded-xl shrink-0"
+                      onClick={() => navigate('/farmer/advisory')}
+                      className="flex-grow inline-flex items-center justify-center px-4 py-2 bg-emerald-650 hover:bg-emerald-800 text-stone-50 text-xs font-extrabold rounded-xl transition-all cursor-pointer shadow-sm"
                     >
-                      Retry Generation
+                      View Crop Advisory
+                    </button>
+                    <button
+                      onClick={() => navigate('/farmer/weather')}
+                      className="px-4 py-2 border border-stone-300 hover:bg-stone-50 text-stone-750 text-xs font-extrabold rounded-xl transition-all cursor-pointer"
+                    >
+                      7-Day Forecast
                     </button>
                   </div>
-                )}
-
-                {loadingAdvisory ? (
-                  <div className="flex flex-col items-center justify-center py-16 space-y-3 bg-stone-50 rounded-2xl border border-dashed border-stone-300">
-                    <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
-                    <span className="text-stone-550 text-xs font-bold">ARVA AI is analyzing weather parameters, soil constraints, and growth stage...</span>
-                  </div>
-                ) : advisory ? (
-                  <div className="space-y-6">
-                    {/* Live Weather Metrics Card */}
-                    <div className="bg-gradient-to-br from-emerald-800 to-emerald-950 text-white border border-emerald-750 p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm">
-                      <div>
-                        <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-wider block">Live Climate Status</span>
-                        <p className="text-sm text-emerald-100 font-bold mt-1">{advisory.weather.description}</p>
-                      </div>
-                      <div className="flex space-x-6 items-center shrink-0">
-                        <div className="text-right">
-                          <span className="block text-[9px] font-bold text-emerald-300 uppercase">Temp</span>
-                          <span className="text-lg font-extrabold">{advisory.weather.temp}°C</span>
-                        </div>
-                        <div className="text-right">
-                          <span className="block text-[9px] font-bold text-emerald-300 uppercase">Wind</span>
-                          <span className="text-sm font-extrabold">{advisory.weather.windspeed} km/h</span>
-                        </div>
-                        <button
-                          onClick={() => navigate('/farmer/weather')}
-                          className="px-3.5 py-1.5 bg-white text-emerald-950 hover:bg-emerald-50 rounded-xl text-xs font-bold shadow-sm transition-colors cursor-pointer"
-                        >
-                          View 7-Day Forecast
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* AI Advisory Structured Cards Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Summary Card */}
-                      <div className="bg-gradient-to-br from-[#ffffff] to-[#faf9f5] border border-stone-200 p-5 rounded-2xl space-y-2 md:col-span-2">
-                        <div className="flex justify-between items-center border-b border-stone-150 pb-2">
-                          <span className="text-xs font-bold text-emerald-800 flex items-center">
-                            <Sparkles className="w-4 h-4 text-emerald-600 mr-1.5" />
-                            Weather-Aware Advisory Summary
-                          </span>
-                          <span className={`px-2.5 py-0.5 border rounded-full text-[9px] font-extrabold tracking-wider ${
-                            advisory.advisory.priority === 'CRITICAL' ? 'bg-red-100 text-red-850 border-red-200' :
-                            advisory.advisory.priority === 'HIGH' ? 'bg-rose-100 text-rose-850 border-rose-200' :
-                            advisory.advisory.priority === 'MEDIUM' ? 'bg-amber-100 text-amber-850 border-amber-200' :
-                            'bg-emerald-100 text-emerald-850 border-emerald-200'
-                          }`}>
-                            {advisory.advisory.priority} PRIORITY
-                          </span>
-                        </div>
-                        <p className="text-xs text-stone-700 leading-relaxed font-semibold">
-                          {advisory.advisory.summary}
-                        </p>
-                      </div>
-
-                      {/* Irrigation Card */}
-                      <div className="bg-[#ffffff] border border-stone-200 p-5 rounded-2xl space-y-2">
-                        <span className="text-xs font-bold text-stone-850 flex items-center">
-                          <Droplets className="w-4 h-4 text-sky-650 mr-1.5" />
-                          Irrigation & Water Advice
-                        </span>
-                        <p className="text-xs text-stone-600 font-semibold leading-relaxed">
-                          {advisory.advisory.irrigation}
-                        </p>
-                      </div>
-
-                      {/* Fertilizer Card */}
-                      <div className="bg-[#ffffff] border border-stone-200 p-5 rounded-2xl space-y-2">
-                        <span className="text-xs font-bold text-stone-850 flex items-center">
-                          <FlaskConical className="w-4 h-4 text-purple-650 mr-1.5" />
-                          Fertilizer & Soil Nutrition
-                        </span>
-                        <p className="text-xs text-stone-600 font-semibold leading-relaxed">
-                          {advisory.advisory.fertilizer}
-                        </p>
-                      </div>
-
-                      {/* Crop Care Card */}
-                      <div className="bg-[#ffffff] border border-stone-200 p-5 rounded-2xl space-y-2">
-                        <span className="text-xs font-bold text-stone-850 flex items-center">
-                          <Sprout className="w-4 h-4 text-emerald-700 mr-1.5" />
-                          Crop Care Guidelines
-                        </span>
-                        <p className="text-xs text-stone-600 font-semibold leading-relaxed">
-                          {advisory.advisory.cropCare}
-                        </p>
-                      </div>
-
-                      {/* Pest Risk Card */}
-                      <div className="bg-[#ffffff] border border-stone-200 p-5 rounded-2xl space-y-2">
-                        <span className="text-xs font-bold text-stone-850 flex items-center">
-                          <Bug className="w-4 h-4 text-rose-650 mr-1.5" />
-                          Pest & Disease Outlook
-                        </span>
-                        <p className="text-xs text-stone-600 font-semibold leading-relaxed">
-                          {advisory.advisory.pestRisk}
-                        </p>
-                      </div>
-
-                      {/* Action Items Checklist Card */}
-                      {advisory.advisory.actions && advisory.advisory.actions.length > 0 && (
-                        <div className="bg-[#ffffff] border border-stone-200 p-5 rounded-2xl space-y-2 md:col-span-2">
-                          <span className="text-xs font-bold text-stone-850 flex items-center border-b border-stone-150 pb-2">
-                            <CheckSquare className="w-4 h-4 text-emerald-750 mr-1.5" />
-                            Step-by-Step Field Action Items
-                          </span>
-                          <ul className="space-y-2 pt-1">
-                            {advisory.advisory.actions.map((action: string, idx: number) => (
-                              <li key={idx} className="flex items-start space-x-2 text-xs font-semibold text-stone-650">
-                                <input
-                                  type="checkbox"
-                                  className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                                />
-                                <span>{action}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* Warning Notice Box */}
-                      {advisory.advisory.warning && (
-                        <div className="bg-red-50/50 border border-red-200 p-4 rounded-2xl flex items-start space-x-2.5 md:col-span-2">
-                          <AlertTriangle className="w-4 h-4 text-red-650 mt-0.5 shrink-0" />
-                          <div>
-                            <span className="block text-[10px] font-extrabold text-red-800 uppercase tracking-wider">Critical Notice / Warning</span>
-                            <p className="text-xs text-red-805 font-bold mt-0.5">{advisory.advisory.warning}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Historical Logs Collapsible list */}
-                    <div className="border-t border-stone-200 pt-4">
-                      <button
-                        onClick={() => setShowHistory(!showHistory)}
-                        className="w-full flex justify-between items-center text-xs font-bold text-stone-650 hover:text-stone-900 border border-stone-250 bg-stone-50 hover:bg-stone-100 p-3 rounded-2xl cursor-pointer transition-colors"
-                      >
-                        <span className="flex items-center">
-                          <History className="w-4 h-4 mr-1.5 text-stone-500" />
-                          View Past AI Advisory Reports ({advisoryHistory.length})
-                        </span>
-                        {showHistory ? 'Hide Logs' : 'Show Logs'}
-                      </button>
-
-                      {showHistory && (
-                        <div className="mt-3 bg-stone-50/50 border border-stone-200 rounded-2xl p-4 divide-y divide-stone-200 max-h-[220px] overflow-y-auto space-y-2">
-                          {advisoryHistory.map((hist: any) => (
-                            <div key={hist.id} className="pt-2 pb-2 first:pt-0 last:pb-0 flex justify-between items-center">
-                              <div>
-                                <span className="block text-[10px] font-bold text-stone-400">
-                                  {new Date(hist.createdAt).toLocaleString()}
-                                </span>
-                                <p className="text-xs font-semibold text-stone-700 truncate max-w-[280px] sm:max-w-md mt-0.5">
-                                  {hist.summary}
-                                </p>
-                              </div>
-                              <button
-                                onClick={() => setSelectedHistoryAdvisory(hist)}
-                                className="px-3 py-1 text-[10px] font-extrabold bg-[#ffffff] hover:bg-stone-100 border border-stone-300 text-stone-700 rounded-lg cursor-pointer"
-                              >
-                                View Report
-                              </button>
-                            </div>
-                          ))}
-                          {advisoryHistory.length === 0 && (
-                            <p className="text-xs text-stone-400 text-center py-4 italic font-semibold">No historical reports archived.</p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-10 space-y-4 bg-stone-55/30 rounded-2xl border border-stone-200 text-center">
-                    <Sparkles className="w-10 h-10 text-emerald-600 animate-pulse" />
-                    <div>
-                      <h4 className="font-extrabold text-stone-850 text-sm">No Crop Advisory Active</h4>
-                      <p className="text-xs text-stone-500 max-w-[280px] mt-1 font-semibold mx-auto">
-                        To receive dynamic irrigation parameters, crop care checklists, and pest forecast metrics, generate a fresh advisory report.
-                      </p>
-                    </div>
-                    <button
-                      onClick={generateAdvisoryData}
-                      className="px-5 py-2.5 bg-emerald-650 hover:bg-emerald-800 text-stone-50 text-xs font-extrabold rounded-xl shadow-sm transition-all inline-flex items-center space-x-1.5 cursor-pointer"
-                    >
-                      <Sparkles className="w-4 h-4" />
-                      <span>Get Crop Advice</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* History Advisory Detail Modal popup */}
-              {selectedHistoryAdvisory && (
-                <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                  <div className="bg-[#ffffff] border border-stone-300 shadow-2xl rounded-3xl max-w-2xl w-full max-h-[85vh] overflow-y-auto flex flex-col">
-                    <div className="p-5 bg-gradient-to-r from-emerald-800 to-emerald-950 text-stone-50 flex justify-between items-center rounded-t-3xl">
-                      <div>
-                        <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-wider block">Historical Advisory Log</span>
-                        <h3 className="font-extrabold text-sm sm:text-base mt-0.5">
-                          Report Mapped: {new Date(selectedHistoryAdvisory.createdAt).toLocaleString()}
-                        </h3>
-                      </div>
-                      <button
-                        onClick={() => setSelectedHistoryAdvisory(null)}
-                        className="p-1 rounded-lg text-emerald-100 hover:bg-emerald-700/50 hover:text-stone-50"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-
-                    <div className="p-6 space-y-4">
-                      {/* Summary */}
-                      <div className="bg-stone-50 border p-4 rounded-xl space-y-1">
-                        <span className="block text-[10px] font-bold text-stone-400 uppercase">Executive Summary</span>
-                        <p className="text-xs text-stone-850 font-semibold leading-relaxed">
-                          {selectedHistoryAdvisory.summary}
-                        </p>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="bg-stone-50 border p-4 rounded-xl space-y-1">
-                          <span className="text-[10px] font-bold text-stone-400 uppercase flex items-center">
-                            <Droplets className="w-3.5 h-3.5 text-sky-600 mr-1" />
-                            Water Strategy
-                          </span>
-                          <p className="text-xs text-stone-700 font-semibold">{selectedHistoryAdvisory.irrigation}</p>
-                        </div>
-                        <div className="bg-stone-50 border p-4 rounded-xl space-y-1">
-                          <span className="text-[10px] font-bold text-stone-400 uppercase flex items-center">
-                            <FlaskConical className="w-3.5 h-3.5 text-purple-650 mr-1" />
-                            Soil Nutrition
-                          </span>
-                          <p className="text-xs text-stone-700 font-semibold">{selectedHistoryAdvisory.fertilizer}</p>
-                        </div>
-                        <div className="bg-stone-50 border p-4 rounded-xl space-y-1">
-                          <span className="text-[10px] font-bold text-stone-400 uppercase flex items-center">
-                            <Sprout className="w-3.5 h-3.5 text-emerald-700 mr-1" />
-                            Crop Care
-                          </span>
-                          <p className="text-xs text-stone-700 font-semibold">{selectedHistoryAdvisory.cropCare}</p>
-                        </div>
-                        <div className="bg-stone-50 border p-4 rounded-xl space-y-1">
-                          <span className="text-[10px] font-bold text-stone-400 uppercase flex items-center">
-                            <Bug className="w-3.5 h-3.5 text-rose-650 mr-1" />
-                            Pest & Disease
-                          </span>
-                          <p className="text-xs text-stone-700 font-semibold">{selectedHistoryAdvisory.pestRisk}</p>
-                        </div>
-                      </div>
-
-                      {/* Actions */}
-                      {selectedHistoryAdvisory.actions && selectedHistoryAdvisory.actions.length > 0 && (
-                        <div className="bg-stone-50 border p-4 rounded-xl space-y-2">
-                          <span className="text-[10px] font-bold text-stone-400 uppercase flex items-center">
-                            <CheckSquare className="w-3.5 h-3.5 text-emerald-700 mr-1" />
-                            Step-by-Step Field Actions
-                          </span>
-                          <ul className="space-y-1.5">
-                            {selectedHistoryAdvisory.actions.map((act: string, i: number) => (
-                              <li key={i} className="text-xs font-semibold text-stone-700 flex items-start">
-                                <span className="mr-1.5 text-emerald-600">•</span>
-                                <span>{act}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="p-4 border-t border-stone-200 flex justify-end">
-                      <button
-                        onClick={() => setSelectedHistoryAdvisory(null)}
-                        className="px-4 py-2 border rounded-xl text-xs font-bold text-stone-700 hover:bg-stone-100 cursor-pointer"
-                      >
-                        Close Report
-                      </button>
-                    </div>
-                  </div>
+                </div>
+              ) : (
+                <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-2xl flex items-center justify-between text-xs font-semibold">
+                  <span>Unable to fetch real weather details.</span>
+                  <button onClick={fetchWeather} className="px-2 py-1 bg-amber-700 text-white rounded font-bold">Retry</button>
                 </div>
               )}
 
@@ -975,14 +688,18 @@ export const FarmerDashboard: React.FC = () => {
               <div className="bg-[#ffffff] p-6 border border-stone-200 shadow-sm rounded-3xl space-y-4">
                 <div className="flex justify-between items-center border-b border-stone-200 pb-2">
                   <h3 className="text-base font-bold text-stone-900 flex items-center">
-                    <Award className="w-5 h-5 mr-1.5 text-emerald-700" />
-                    Advisories & Alerts
+                    <AlertTriangle className="w-5 h-5 mr-1.5 text-emerald-700" />
+                    Alerts
                   </h3>
-                  <button onClick={() => navigate('/farmer?tab=broadcasts')} className="text-xs text-emerald-700 font-bold hover:underline">View All</button>
+                  <button onClick={() => navigate('/farmer/alerts')} className="text-xs text-emerald-700 font-bold hover:underline animate-pulse">View All</button>
                 </div>
                 <div className="space-y-3">
                   {broadcasts.map((br) => (
-                    <div key={br.id} className="p-3 border border-stone-100 bg-[#faf9f5] rounded-2xl">
+                    <div
+                      key={br.id}
+                      onClick={() => navigate('/farmer/alerts')}
+                      className="p-3 border border-stone-100 bg-[#faf9f5] rounded-2xl cursor-pointer hover:bg-stone-50 transition-colors"
+                    >
                       <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase mb-1.5 ${
                         br.priority === 'HIGH' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
                       }`}>
@@ -993,7 +710,7 @@ export const FarmerDashboard: React.FC = () => {
                     </div>
                   ))}
                   {broadcasts.length === 0 && (
-                    <p className="text-stone-400 text-xs font-semibold py-4 text-center">No active crop advisories.</p>
+                    <p className="text-stone-400 text-xs font-semibold py-4 text-center">No active alerts.</p>
                   )}
                 </div>
               </div>

@@ -15,7 +15,7 @@ interface AlertItem {
   id: string;
   title: string;
   message: string;
-  type: 'Weather' | 'Pest/Disease' | 'Government' | 'Regional' | 'AI Advisory';
+  type: 'Weather' | 'Pest/Disease' | 'Government' | 'Regional';
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
   timestamp: string;
   author: string;
@@ -25,7 +25,7 @@ export const Alerts: React.FC = () => {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [weather, setWeather] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeFilter, setActiveFilter] = useState<'All' | 'Weather' | 'Pest/Disease' | 'Government' | 'Regional' | 'AI Advisory'>('All');
+  const [activeFilter, setActiveFilter] = useState<'All' | 'Weather' | 'Pest/Disease' | 'Government' | 'Regional'>('All');
 
   const fetchAlertsAndAdvisory = async () => {
     try {
@@ -33,38 +33,12 @@ export const Alerts: React.FC = () => {
       const broadcastsRes = await api.get('/broadcasts');
       const broadcasts = broadcastsRes.data.data;
 
-      // 2. Fetch AI Advisory (we do this in parallel, but handle gracefully if onboarding isn't done)
-      let aiAdvisoryItem: AlertItem | null = null;
+      // 2. Fetch weather info directly
       try {
-        const advisoryRes = await api.get('/ai/advisory');
-        const data = advisoryRes.data.data;
-        if (data.advisory) {
-          const advisoryText = `Summary: ${data.advisory.summary}
-
-• Priority Level: ${data.advisory.priority}
-• Weather Impact: ${data.advisory.weatherImpact}
-• Irrigation Plan: ${data.advisory.irrigation}
-• Crop Care Plan: ${data.advisory.cropCare}
-• Fertilizer Plan: ${data.advisory.fertilizer}
-• Pest & Disease Risk: ${data.advisory.pestRisk}
-
-Important Warning: ${data.advisory.warning}`;
-
-          aiAdvisoryItem = {
-            id: 'ai-advisory-id',
-            title: 'Personalized AI Crop Advisory Report',
-            message: advisoryText,
-            type: 'AI Advisory',
-            priority: data.advisory.priority || 'MEDIUM',
-            timestamp: data.createdAt || new Date().toISOString(),
-            author: 'ARVA AI Advisor',
-          };
-        }
-        if (data.weather) {
-          setWeather(data.weather);
-        }
+        const weatherRes = await api.get('/weather');
+        setWeather(weatherRes.data.data.current);
       } catch (err) {
-        console.log('AI Advisory not available yet (onboarding might be incomplete)');
+        console.log('Weather details not available on Alerts page');
       }
 
       // 3. Classify and map broadcasts
@@ -93,8 +67,7 @@ Important Warning: ${data.advisory.warning}`;
         };
       });
 
-      const allItems = aiAdvisoryItem ? [aiAdvisoryItem, ...mappedAlerts] : mappedAlerts;
-      setAlerts(allItems);
+      setAlerts(mappedAlerts);
     } catch (err) {
       console.error('Failed to load advisories and alerts:', err);
     } finally {
@@ -174,7 +147,7 @@ Important Warning: ${data.advisory.warning}`;
             Advisory Filters
           </h3>
           <div className="flex flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible gap-1.5 pr-2 pb-2 lg:pb-0">
-            {(['All', 'Weather', 'Pest/Disease', 'Government', 'Regional', 'AI Advisory'] as const).map((filter) => (
+            {(['All', 'Weather', 'Pest/Disease', 'Government', 'Regional'] as const).map((filter) => (
               <button
                 key={filter}
                 onClick={() => setActiveFilter(filter)}

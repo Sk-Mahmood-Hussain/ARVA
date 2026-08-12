@@ -33,11 +33,11 @@ const profileFormSchema = z.object({
   district: z.string().min(1, 'District is required'),
   block: z.string().min(1, 'Block is required'),
   village: z.string().min(1, 'Village is required'),
-  landSize: z.number({ invalid_type_error: 'Land size must be a number' }).positive('Land size must be positive'),
-  soilType: z.string().min(1, 'Soil type is required'),
-  irrigationType: z.string().min(1, 'Irrigation type is required'),
-  primaryCrop: z.string().min(1, 'Primary crop is required'),
-  cropGrowthStage: z.string().min(1, 'Crop growth stage is required'),
+  landSize: z.any().optional(),
+  soilType: z.string().optional(),
+  irrigationType: z.string().optional(),
+  primaryCrop: z.string().optional(),
+  cropGrowthStage: z.string().optional(),
   language: z.string().min(1, 'Language preference is required'),
 });
 
@@ -68,6 +68,7 @@ export const Profile: React.FC = () => {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [customCrop, setCustomCrop] = useState('');
 
   // Region lists for select chain
   const [states, setStates] = useState<string[]>([]);
@@ -103,6 +104,7 @@ export const Profile: React.FC = () => {
   const selectedState = watch('state');
   const selectedDistrict = watch('district');
   const selectedBlock = watch('block');
+  const selectedCrop = watch('primaryCrop');
 
   const fetchProfileAndOfficers = async () => {
     try {
@@ -110,6 +112,8 @@ export const Profile: React.FC = () => {
       const profileData = res.data?.data;
       if (profileData) {
         setProfile(profileData);
+        const standardCrops = ['Wheat', 'Paddy', 'Maize', 'Cotton', 'Sugarcane'];
+        const isStandard = standardCrops.includes(profileData.primaryCrop);
         reset({
           name: user?.name || '',
           phoneNumber: user?.phoneNumber || '',
@@ -121,10 +125,13 @@ export const Profile: React.FC = () => {
           landSize: profileData.landSize,
           soilType: profileData.soilType,
           irrigationType: profileData.irrigationType,
-          primaryCrop: profileData.primaryCrop,
+          primaryCrop: isStandard ? profileData.primaryCrop : (profileData.primaryCrop ? 'Other' : ''),
           cropGrowthStage: profileData.cropGrowthStage,
           language: user?.language || 'en',
         });
+        if (!isStandard && profileData.primaryCrop) {
+          setCustomCrop(profileData.primaryCrop);
+        }
 
         // Map regional officers
         if (profileData.region?.officers) {
@@ -273,7 +280,15 @@ export const Profile: React.FC = () => {
     setSuccessMsg(null);
     setErrorMsg(null);
     try {
-      await api.patch('/farmers/profile', values);
+      const payload = {
+        ...values,
+        landSize: values.landSize ? Number(values.landSize) : 1.0,
+        soilType: values.soilType || 'Loamy',
+        irrigationType: values.irrigationType || 'Tube Well',
+        primaryCrop: (values.primaryCrop === 'Other' && customCrop) ? customCrop : (values.primaryCrop || 'Wheat'),
+        cropGrowthStage: values.cropGrowthStage || 'Sowing',
+      };
+      await api.patch('/farmers/profile', payload);
       await refreshUser();
       setSuccessMsg('Your profile credentials and coordinates have been updated successfully!');
       setTimeout(() => setSuccessMsg(null), 5000);
@@ -540,22 +555,23 @@ export const Profile: React.FC = () => {
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-stone-600">Land Size (Acres)</label>
+                    <label className="block text-xs font-bold text-stone-600">Land Size (Acres) <span className="text-stone-400 font-semibold">(Optional)</span></label>
                     <input
                       type="number"
                       step="0.1"
                       {...register('landSize', { valueAsNumber: true })}
-                      className="mt-1 block w-full px-4 py-2.5 border border-stone-300 bg-stone-50 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                      className="mt-1 block w-full px-4 py-2.5 border border-stone-300 bg-[#ffffff] rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                     />
-                    {errors.landSize && <p className="text-xs text-red-600 mt-1">{errors.landSize.message}</p>}
+                    {errors.landSize && <p className="text-xs text-red-600 mt-1">{(errors.landSize as any).message}</p>}
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-stone-600">Soil Category</label>
+                    <label className="block text-xs font-bold text-stone-600">Soil Category <span className="text-stone-400 font-semibold">(Optional)</span></label>
                     <select
                       {...register('soilType')}
-                      className="mt-1 block w-full px-4 py-2.5 border border-stone-300 bg-stone-50 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer"
+                      className="mt-1 block w-full px-4 py-2.5 border border-stone-300 bg-stone-55/40 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer"
                     >
+                      <option value="">Select Soil (Optional)</option>
                       <option value="Loamy">Loamy (Mera)</option>
                       <option value="Sandy">Sandy (Retli)</option>
                       <option value="Clayey">Clayey (Cheeka)</option>
@@ -564,11 +580,12 @@ export const Profile: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-stone-600">Irrigation System</label>
+                    <label className="block text-xs font-bold text-stone-600">Irrigation System <span className="text-stone-400 font-semibold">(Optional)</span></label>
                     <select
                       {...register('irrigationType')}
-                      className="mt-1 block w-full px-4 py-2.5 border border-stone-300 bg-stone-50 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer"
+                      className="mt-1 block w-full px-4 py-2.5 border border-stone-300 bg-stone-55/40 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer"
                     >
+                      <option value="">Select Irrigation (Optional)</option>
                       <option value="Tube Well">Tube Well Irrigation</option>
                       <option value="Canal System">Canal (Nahar) System</option>
                       <option value="Drip System">Drip Irrigation</option>
@@ -578,25 +595,43 @@ export const Profile: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-stone-600">Primary Sown Crop</label>
+                    <label className="block text-xs font-bold text-stone-600">Crop Category <span className="text-stone-400 font-semibold">(Optional)</span></label>
+                    <select
+                      className="mt-1 block w-full px-4 py-2.5 border border-stone-300 bg-stone-55/40 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer"
+                    >
+                      <option value="">Select Category (Optional)</option>
+                      <option value="Cereals">Cereals / Grains</option>
+                      <option value="Vegetables">Vegetables</option>
+                      <option value="Fruits">Fruits</option>
+                      <option value="Oilseeds">Oilseeds</option>
+                      <option value="Pulses">Pulses / Legumes</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-stone-600">Primary Sown Crop <span className="text-stone-400 font-semibold">(Optional)</span></label>
                     <select
                       {...register('primaryCrop')}
-                      className="mt-1 block w-full px-4 py-2.5 border border-stone-300 bg-stone-50 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer"
+                      className="mt-1 block w-full px-4 py-2.5 border border-stone-300 bg-stone-55/40 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer"
                     >
+                      <option value="">Select Crop (Optional)</option>
                       <option value="Wheat">Wheat (Kanak)</option>
                       <option value="Paddy">Rice (Dhan/Paddy)</option>
                       <option value="Maize">Maize (Makki)</option>
                       <option value="Cotton">Cotton (Narma)</option>
                       <option value="Sugarcane">Sugarcane (Ganna)</option>
+                      <option value="Other">Other</option>
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-stone-600">Growth Stage</label>
+                    <label className="block text-xs font-bold text-stone-600">Growth Stage <span className="text-stone-400 font-semibold">(Optional)</span></label>
                     <select
                       {...register('cropGrowthStage')}
-                      className="mt-1 block w-full px-4 py-2.5 border border-stone-300 bg-stone-50 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer"
+                      className="mt-1 block w-full px-4 py-2.5 border border-stone-300 bg-stone-55/40 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer"
                     >
+                      <option value="">Select Stage (Optional)</option>
                       <option value="Sowing">Sowing</option>
                       <option value="Vegetative">Vegetative Growth</option>
                       <option value="Flowering">Flowering Stage</option>
@@ -605,6 +640,19 @@ export const Profile: React.FC = () => {
                     </select>
                   </div>
                 </div>
+
+                {selectedCrop === 'Other' && (
+                  <div className="bg-emerald-50/55 p-4 border border-emerald-200 rounded-2xl max-w-md">
+                    <label className="block text-xs font-bold text-stone-600">Enter Custom Crop / Product <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={customCrop}
+                      onChange={(e) => setCustomCrop(e.target.value)}
+                      placeholder="e.g. Mustard, Soya Bean"
+                      className="mt-1 block w-full px-4 py-2.5 border border-stone-300 bg-[#ffffff] rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Actions */}
